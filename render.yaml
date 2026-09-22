@@ -1,0 +1,22 @@
+# Render 免费套餐部署配置（Blueprint / Infrastructure as Code）
+#
+# 用法：把整个项目推到 GitHub，然后在 Render 选 New → Blueprint，指向这个仓库即可。
+# 也可以不用这个文件：New → Web Service，手动填
+#   Build Command: pip install -r requirements.txt
+#   Start Command: uvicorn server:app --host 0.0.0.0 --port $PORT
+#
+# 注意：免费套餐闲置约 15 分钟后会休眠，下次打开要等 30~60 秒唤醒。
+# 想让房间一直热着，可以养一个定时任务每隔几分钟打一次 /health。
+
+services:
+  - type: web
+    name: snake-battle
+    runtime: python
+    plan: free
+    region: singapore        # 离国内最近的免费区域
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"

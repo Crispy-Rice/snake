@@ -1,0 +1,2367 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#04060d">
+<title>双人对战贪吃蛇</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --neon: #22e6ff;
+    --neon-2: #ff3df0;
+    --neon-3: #a855f7;
+    --panel-line: rgba(34, 230, 255, .22);
+    --text: #dff6ff;
+    --muted: #6f8fa6;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  body {
+    position: fixed;
+    inset: 0;
+    background: #04060d;
+    background-image:
+      radial-gradient(900px 620px at 10% -12%, rgba(34, 230, 255, .16), transparent 62%),
+      radial-gradient(820px 640px at 94% 112%, rgba(255, 61, 240, .13), transparent 62%),
+      radial-gradient(700px 520px at 50% 46%, rgba(168, 85, 247, .08), transparent 72%);
+    color: var(--text);
+    font-family: "Segoe UI", -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom,
+      rgba(255, 255, 255, .022) 0 1px, transparent 1px 3px);
+  }
+
+  .app {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .hud { display: contents; }
+
+  .stage {
+    position: relative;
+    flex: 1;
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  body.touch .keys-only { display: none !important; }
+  body:not(.touch) .touch-only { display: none !important; }
+  .hidden { display: none !important; }
+
+  /* ---------- player cards ---------- */
+  .panel {
+    position: fixed;
+    top: 26px;
+    padding: 12px 16px;
+    background: linear-gradient(180deg, rgba(12, 26, 40, .72), rgba(8, 16, 28, .58));
+    border: 1px solid var(--panel-line);
+    border-radius: 16px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow:
+      inset 0 0 22px rgba(34, 230, 255, .06),
+      0 0 20px rgba(34, 230, 255, .10),
+      0 12px 32px rgba(0, 0, 0, .5);
+    min-width: 150px;
+    transition: opacity .25s, box-shadow .25s;
+  }
+  .panel.empty { opacity: .4; }
+  .panel.active {
+    box-shadow:
+      inset 0 0 22px color-mix(in srgb, var(--pc) 12%, transparent),
+      0 0 22px color-mix(in srgb, var(--pc) 45%, transparent),
+      0 12px 32px rgba(0, 0, 0, .5);
+    border-color: color-mix(in srgb, var(--pc) 55%, transparent);
+  }
+  .panel.dead { opacity: .45; }
+
+  .pcard { left: 26px; }
+  .pcard.right { left: auto; right: 26px; }
+
+  .prow { display: flex; align-items: center; gap: 9px; }
+  .dot {
+    width: 11px; height: 11px; border-radius: 50%;
+    background: var(--pc, #456);
+    box-shadow: 0 0 10px var(--pc, transparent);
+    flex: none;
+  }
+  .pname {
+    font-size: 14px; font-weight: 600;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    max-width: 120px;
+  }
+  .pscore {
+    font-size: 30px; font-weight: 700; line-height: 1.1;
+    color: var(--pc, var(--neon));
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px color-mix(in srgb, var(--pc) 70%, transparent);
+  }
+  .ptag {
+    font-size: 10px; letter-spacing: .1em; color: var(--muted);
+    text-transform: uppercase; margin-left: auto;
+  }
+
+  /* ---------- board ---------- */
+  .board {
+    --r: clamp(12px, 2.8vmin, 20px);
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: var(--r);
+    box-shadow:
+      0 0 0 1px rgba(34, 230, 255, .30),
+      0 0 30px rgba(34, 230, 255, .20),
+      0 0 90px rgba(255, 61, 240, .13),
+      0 26px 70px rgba(0, 0, 0, .62);
+  }
+
+  canvas { display: block; border-radius: var(--r); }
+
+  /* ---------- overlay ---------- */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    border-radius: var(--r);
+    background: rgba(4, 6, 13, .82);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    text-align: center;
+    padding: 16px;
+    overflow: hidden;
+  }
+
+  /* 中间内容可滚动，底部的按钮永远留在可见位置 */
+  .ovscroll {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+  }
+  .actions { flex: none; }
+  .overlay.hidden { display: none; }
+
+  .badge {
+    font-size: 11px; letter-spacing: .14em; color: var(--neon-2);
+    text-shadow: 0 0 12px rgba(255, 61, 240, .7); text-transform: uppercase;
+    min-height: 14px;
+  }
+  .title { font-size: 22px; font-weight: 700; letter-spacing: .03em; }
+  .title .k { color: var(--neon); text-shadow: 0 0 8px rgba(34,230,255,.95), 0 0 26px rgba(34,230,255,.55); }
+  .sub { font-size: 13px; color: var(--muted); min-height: 16px; }
+
+  .plist { list-style: none; width: 100%; max-width: 240px; }
+  .plist li {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 10px; margin-bottom: 6px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .035);
+    border: 1px solid rgba(255, 255, 255, .06);
+    font-size: 13px;
+  }
+  .plist li .host {
+    margin-left: auto; font-size: 10px; letter-spacing: .1em;
+    color: var(--neon); text-transform: uppercase;
+  }
+  .plist li.slot { opacity: .35; border-style: dashed; }
+
+  input[type=text] {
+    width: 100%; max-width: 240px;
+    padding: 11px 14px;
+    font: inherit; font-size: 14px;
+    color: var(--text);
+    background: rgba(4, 10, 18, .8);
+    border: 1px solid var(--panel-line);
+    border-radius: 11px;
+    outline: none;
+    text-align: center;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  input[type=text]:focus {
+    border-color: var(--neon);
+    box-shadow: 0 0 0 3px rgba(34, 230, 255, .14);
+  }
+
+  .btn {
+    font: inherit; font-size: 14px; font-weight: 600;
+    letter-spacing: .04em;
+    padding: 11px 30px;
+    color: #04121c;
+    background: linear-gradient(180deg, #7df3ff, var(--neon));
+    border: 0; border-radius: 999px;
+    cursor: pointer;
+    box-shadow: 0 0 20px rgba(34, 230, 255, .5);
+    transition: transform .12s, box-shadow .2s, opacity .2s;
+  }
+  .btn:hover:not(:disabled) { box-shadow: 0 0 30px rgba(34, 230, 255, .75); }
+  .btn:active:not(:disabled) { transform: scale(.96); }
+  .btn:disabled {
+    background: rgba(255, 255, 255, .08);
+    color: var(--muted);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  .btn.hidden { display: none; }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+  .btn.ghost {
+    background: transparent;
+    color: var(--neon);
+    border: 1px solid var(--panel-line);
+    box-shadow: none;
+  }
+  .btn.ghost:hover:not(:disabled) { box-shadow: 0 0 18px rgba(34, 230, 255, .35); }
+
+  /* ---------- level select ---------- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+    width: 100%;
+    max-width: 310px;
+  }
+
+  .lvlbtn {
+    font: inherit;
+    padding: 7px 3px;
+    color: var(--text);
+    background: rgba(34, 230, 255, .08);
+    border: 1px solid var(--panel-line);
+    border-radius: 9px;
+    cursor: pointer;
+    transition: box-shadow .15s, transform .12s, opacity .15s;
+  }
+  .lvlbtn .n { display: block; font-size: 15px; font-weight: 700; color: var(--neon); }
+  .lvlbtn .nm { display: block; font-size: 9px; color: var(--muted); margin-top: 1px; }
+  .lvlbtn:hover:not(:disabled) { box-shadow: 0 0 14px rgba(34, 230, 255, .4); }
+  .lvlbtn:active:not(:disabled) { transform: scale(.94); }
+  .lvlbtn:disabled { opacity: .28; cursor: not-allowed; }
+  .lvlbtn.cleared {
+    border-color: rgba(125, 255, 176, .5);
+    background: rgba(125, 255, 176, .10);
+  }
+  .lvlbtn.cleared .n { color: #7dffb0; }
+
+  /* ---------- 联机记分板（含倒计时） ---------- */
+  .board-panel {
+    left: auto; right: 26px;
+    min-width: 196px;
+  }
+  .bprow {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 12px; margin-bottom: 5px;
+  }
+  .bprow .label { margin: 0; }
+  .timer {
+    font-size: 22px; font-weight: 700; line-height: 1;
+    color: var(--neon);
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px rgba(34, 230, 255, .8);
+  }
+  .timer.urgent {
+    color: #ff5c78;
+    text-shadow: 0 0 12px rgba(255, 42, 64, .95);
+    animation: pulseRed .55s ease-in-out infinite;
+  }
+  @keyframes pulseRed { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }
+
+  #scoreboard { list-style: none; }
+  #scoreboard li {
+    display: flex; align-items: center; gap: 7px;
+    padding: 3px 0;
+    font-size: 13px;
+    color: var(--muted);
+    border-bottom: 1px solid rgba(255, 255, 255, .05);
+  }
+  #scoreboard li:last-child { border-bottom: 0; }
+  #scoreboard li.me { color: #ffffff; font-weight: 600; }
+  #scoreboard li.dead { opacity: .5; }
+  #scoreboard .sdot {
+    width: 9px; height: 9px; border-radius: 50%; flex: none;
+    box-shadow: 0 0 8px currentColor;
+  }
+  #scoreboard .sname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 96px; }
+  #scoreboard .sscore { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--text); }
+  #scoreboard .sres { font-size: 10px; color: #ff5c78; }
+
+  /* ---------- 击杀提示 ---------- */
+  .killfeed {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 4px; align-items: center;
+    pointer-events: none; z-index: 2; width: max-content; max-width: 94%;
+  }
+  .kf {
+    font-size: 12px; padding: 4px 12px; border-radius: 999px;
+    background: rgba(6, 14, 24, .84);
+    border: 1px solid rgba(34, 230, 255, .25);
+    color: #cfe8f8;
+    transition: opacity .6s, transform .6s;
+  }
+  .kf.good { border-color: rgba(125, 255, 176, .6); color: #b8ffd4; }
+  .kf.bad { border-color: rgba(255, 92, 120, .75); color: #ffc2cd; }
+  .kf.out { opacity: 0; transform: translateY(-6px); }
+
+  /* ---------- 表情栏 ---------- */
+  .emote-bar {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px; z-index: 3;
+  }
+  .emote-bar button {
+    font-size: 19px; line-height: 1;
+    width: 38px; height: 38px;
+    border-radius: 10px; cursor: pointer;
+    background: rgba(10, 22, 34, .72);
+    border: 1px solid var(--panel-line);
+    transition: transform .12s, box-shadow .15s;
+  }
+  .emote-bar button:hover { box-shadow: 0 0 14px rgba(34, 230, 255, .45); }
+  .emote-bar button:active { transform: scale(.9); }
+
+  /* ---------- 皮肤选择 ---------- */
+  .skins { display: flex; gap: 7px; }
+  .skins button {
+    width: 34px; height: 34px; padding: 0; cursor: pointer;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, .05);
+    border: 1px solid var(--panel-line);
+    display: grid; place-items: center;
+    transition: box-shadow .15s, transform .12s;
+  }
+  .skins button:active { transform: scale(.92); }
+  .skins button.sel { border-color: var(--neon); box-shadow: 0 0 14px rgba(34, 230, 255, .5); }
+  .skins button .sw { width: 16px; height: 16px; }
+
+  /* ---------- 自己的效果条 ---------- */
+  .effects { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .effects:empty { display: none; }
+  .eff {
+    font-size: 10px; padding: 2px 7px; border-radius: 999px;
+    border: 1px solid currentColor;
+    font-variant-numeric: tabular-nums;
+  }
+  .eff.ghost { color: #c9a6ff; }
+  .eff.shield { color: #7dffb0; }
+  .eff.slow { color: #ffb020; }
+  .eff.frozen { color: #78cdff; }
+
+  /* ---------- 技能按钮 ---------- */
+  .skill-btn {
+    position: fixed; right: 22px; bottom: 58px;
+    padding: 9px 16px; font-size: 13px; min-width: 96px;
+    z-index: 3;
+  }
+  .skill-btn .ic { font-size: 15px; margin-right: 4px; }
+  .skill-btn.cool {
+    /* 冷却时有一道从左往右回满的进度条 */
+    background: linear-gradient(to right,
+      rgba(34, 230, 255, .30) var(--fill, 0%),
+      rgba(255, 255, 255, .07) var(--fill, 0%));
+    color: #dff6ff;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  /* 本局进行中才加入的人：没有蛇，给一个「准备下一局」的按钮 */
+  .wait-btn {
+    position: fixed; left: 22px; bottom: 58px;
+    padding: 9px 16px; font-size: 13px;
+    z-index: 3;
+  }
+  .wait-btn.cool { color: #7dffb0; border-color: rgba(125, 255, 176, .6); }
+
+  /* ---------- 食物说明 ---------- */
+  .legend {
+    display: grid; grid-template-columns: auto auto; gap: 4px 16px;
+    font-size: 11px; color: var(--muted); text-align: left;
+  }
+  .legend div { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+
+  /* ---------- 大厅里的技能 / 难度选择 ---------- */
+  .picks { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 320px; }
+  .picks:empty { display: none; }
+  .picks button {
+    font: inherit; font-size: 12px; padding: 7px 13px;
+    border-radius: 10px; cursor: pointer;
+    background: rgba(34, 230, 255, .08);
+    border: 1px solid var(--panel-line);
+    color: var(--text);
+    transition: box-shadow .15s, transform .12s, opacity .15s;
+  }
+  .picks button:active:not(:disabled) { transform: scale(.94); }
+  .picks button.sel { border-color: var(--neon); box-shadow: 0 0 14px rgba(34, 230, 255, .5); }
+  .picks button:disabled { opacity: .4; cursor: not-allowed; }
+  .picks .phint { font-size: 11px; color: var(--muted); width: 100%; text-align: center; }
+
+  /* 紧迫感：棋盘外发光转红 */
+  .board.urgent {
+    box-shadow:
+      0 0 0 1px rgba(255, 42, 64, .55),
+      0 0 34px rgba(255, 42, 64, .42),
+      0 0 90px rgba(255, 42, 64, .22),
+      0 26px 70px rgba(0, 0, 0, .62);
+  }
+
+  @media (max-width: 920px) {
+    .board-panel { left: auto; right: auto; min-width: 0; width: 100%; max-width: 300px; }
+    .timer { font-size: 18px; }
+    #scoreboard li { font-size: 11px; padding: 2px 0; }
+    #scoreboard .sname { max-width: 78px; }
+    .emote-bar { bottom: 44px; }
+    .emote-bar button { width: 32px; height: 32px; font-size: 16px; }
+    .skill-btn { right: 12px; bottom: 42px; padding: 8px 12px; font-size: 12px; min-width: 78px; }
+    .skins button { width: 30px; height: 30px; }
+    .picks { max-width: 280px; }
+    .legend { grid-template-columns: 1fr; gap: 3px 0; font-size: 10px; }
+  }
+
+  /* ---------- bottom hint ---------- */
+  .hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 12px;
+    letter-spacing: .16em;
+    color: var(--muted);
+    padding: 0 16px;
+  }
+  .hint b { color: #b9c6d6; font-weight: 600; }
+  .hint .sep { width: 1px; height: 13px; background: rgba(255, 255, 255, .13); }
+  #latency { color: var(--neon); font-variant-numeric: tabular-nums; }
+  #conn { color: #ff6b6b; }
+
+  /* ---------- mobile ---------- */
+  @media (max-width: 920px) {
+    .app { justify-content: flex-start; gap: 10px; padding-top: calc(10px + env(safe-area-inset-top)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+    .hud {
+      display: flex; align-items: stretch; gap: 8px;
+      flex: none; width: 100%; max-width: 560px; padding: 0 10px;
+    }
+    .panel { position: static; flex: 1; min-width: 0; padding: 9px 12px; }
+    .pcard.right { left: auto; right: auto; }
+    .pname { font-size: 13px; max-width: none; }
+    .pscore { font-size: 24px; }
+    .hint { position: static; transform: none; gap: 10px; padding: 0 12px; }
+    .title { font-size: 19px; }
+    .sub { font-size: 12px; }
+  }
+
+  @media (max-width: 920px) and (orientation: landscape) {
+    .app { flex-direction: row; align-items: center; justify-content: center; gap: 12px; }
+    .hud { flex-direction: column; flex: none; width: 152px; max-width: 152px; padding: 0; }
+    .panel { flex: none; width: 100%; }
+    .stage { flex: 1; height: 100%; }
+    .hint {
+      position: absolute; left: 10px; bottom: 4px; transform: none;
+      flex-direction: column; align-items: flex-start; gap: 4px; padding: 0; font-size: 11px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="hud">
+    <div class="panel pcard" id="card-0">
+      <div class="prow"><span class="dot"></span><span class="pname">等待玩家…</span><span class="ptag" id="tag-0"></span></div>
+      <div class="pscore" id="score-0">0</div>
+    </div>
+    <div class="panel pcard right" id="card-1">
+      <div class="prow"><span class="dot"></span><span class="pname">等待玩家…</span><span class="ptag" id="tag-1"></span></div>
+      <div class="pscore" id="score-1">0</div>
+    </div>
+
+    <div class="panel board-panel" id="boardPanel">
+      <div class="bprow">
+        <span class="label">比分</span>
+        <span class="timer" id="timer">2:00</span>
+      </div>
+      <ol id="scoreboard"></ol>
+      <div class="effects" id="effectBar"></div>
+    </div>
+  </div>
+
+  <div class="emote-bar" id="emoteBar"></div>
+  <button class="btn skill-btn" id="skillBtn">闪现</button>
+  <button class="btn ghost wait-btn hidden" id="waitBtn">准备下一局</button>
+
+  <div class="stage">
+    <div class="board">
+      <canvas id="game"></canvas>
+      <div class="killfeed" id="killFeed"></div>
+      <div class="overlay" id="overlay">
+        <div class="ovscroll">
+          <div class="badge" id="badge"></div>
+          <div class="title" id="title"></div>
+          <div class="sub" id="sub"></div>
+          <div class="skins" id="skinRow"></div>
+          <div class="legend" id="foodLegend">
+            <div><i style="background:#ffd0fa;box-shadow:0 0 8px #ff3df0"></i>普通食物 · 长度 +1，分数 +10</div>
+            <div><i style="background:#d9c2ff;box-shadow:0 0 8px #a855f7"></i>隐身 · 5 秒内别人只看到残影</div>
+            <div><i style="background:#ffd9a0;box-shadow:0 0 8px #ffb020"></i>减速 · 其他玩家 5 秒移速减半</div>
+            <div><i style="background:#c6ffd9;box-shadow:0 0 8px #7dffb0"></i>无敌 · 5 秒内不会死</div>
+          </div>
+          <div class="picks" id="skillRow"></div>
+          <div class="picks" id="diffRow"></div>
+          <ul class="plist" id="plist"></ul>
+          <div class="grid" id="levelGrid"></div>
+          <div class="row" id="joinRow">
+            <input type="text" id="nameInput" maxlength="16" placeholder="输入你的名字（留空用默认名）" autocomplete="off">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="primaryBtn">进入房间</button>
+          <button class="btn ghost" id="readyBtn">准备</button>
+          <button class="btn ghost" id="secondaryBtn">返回</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hint">
+    <span class="keys-only"><b>W</b> <b>A</b> <b>S</b> <b>D</b> 移动</span>
+    <span class="touch-only">滑动屏幕控制方向</span>
+    <span class="sep keys-only"></span>
+    <span class="keys-only"><b>空格</b> 暂停</span>
+    <span class="sep keys-only"></span>
+    <span class="keys-only"><b>R</b> 重开</span>
+    <span class="sep keys-only"></span>
+    <span class="keys-only"><b>E</b> 技能</span>
+    <span class="sep"></span>
+    <span><span id="fps">--</span> FPS</span>
+    <span class="sep"></span>
+    <span>延迟 <span id="latency">--</span> ms</span>
+    <span id="conn"></span>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  // 棋盘尺寸：单人 20×20，联机由服务器的 welcome 消息设定（32×32）
+  const CELL = 20;
+  let COLS = 20, ROWS = 20;
+  let W = COLS * CELL, H = ROWS * CELL;
+  let MAX_BOARD = 460;
+
+  // 5 种皮肤：形状和颜色都不同，保证同屏时一眼能分清
+  const SKINS = [
+    { name: '霓虹青', color: '#22e6ff', shape: 'round' },
+    { name: '品红方', color: '#ff3df0', shape: 'square' },
+    { name: '琥珀菱', color: '#ffb020', shape: 'diamond' },
+    { name: '翠绿六', color: '#7dffb0', shape: 'hex' },
+    { name: '紫水滴', color: '#a855f7', shape: 'drop' },
+  ];
+
+  // 特殊食物：颜色 + 外圈样式都不同，扫一眼就能认出是哪种
+  const FOOD_STYLE = {
+    normal: { core: '#ffd0fa', rgb: '255,61,240', ring: null,    label: '普通' },
+    ghost:  { core: '#d9c2ff', rgb: '168,85,247', ring: 'dash',  label: '隐身 5s' },
+    slow:   { core: '#ffd9a0', rgb: '255,176,32', ring: 'double', label: '减速他人 5s' },
+    shield: { core: '#c6ffd9', rgb: '125,255,176', ring: 'thick', label: '无敌 5s' },
+  };
+
+  const SKILL_META = {
+    blink:  { label: '闪现', icon: '⚡', desc: '向前瞬移 5 格' },
+    shield: { label: '无敌', icon: '🛡', desc: '3 秒内不会死' },
+    slow:   { label: '减速', icon: '🐌', desc: '其他玩家 5 秒内移速减半' },
+  };
+  const SKILL_CD_MAX = 25;              // 与服务器的 SKILL_COOLDOWN 保持一致
+  const DIFF_META = {
+    easy:   { label: '简单', desc: '慢速 · 特殊食物少 · 150 秒' },
+    normal: { label: '普通', desc: '标准 · 120 秒' },
+    hard:   { label: '困难', desc: '极速 · 特殊食物多 · 90 秒' },
+  };
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const badgeEl = document.getElementById('badge');
+  const titleEl = document.getElementById('title');
+  const subEl = document.getElementById('sub');
+  const plistEl = document.getElementById('plist');
+  const joinRow = document.getElementById('joinRow');
+  const nameInput = document.getElementById('nameInput');
+  const primaryBtn = document.getElementById('primaryBtn');
+  const secondaryBtn = document.getElementById('secondaryBtn');
+  const readyBtn = document.getElementById('readyBtn');
+  const levelGrid = document.getElementById('levelGrid');
+  const skinRow = document.getElementById('skinRow');
+  const foodLegendEl = document.getElementById('foodLegend');
+  const killFeedEl = document.getElementById('killFeed');
+  const scoreboardEl = document.getElementById('scoreboard');
+  const timerEl = document.getElementById('timer');
+  const emoteBar = document.getElementById('emoteBar');
+  const fpsEl = document.getElementById('fps');
+  const skillBtn = document.getElementById('skillBtn');
+  const waitBtn = document.getElementById('waitBtn');
+  const effectBar = document.getElementById('effectBar');
+  const diffRow = document.getElementById('diffRow');
+  const skillRow = document.getElementById('skillRow');
+  const boardEl = document.querySelector('.board');
+  const boardPanelEl = document.getElementById('boardPanel');
+  const latencyEl = document.getElementById('latency');
+  const connEl = document.getElementById('conn');
+  const stageEl = document.querySelector('.stage');
+  const hudEl = document.querySelector('.hud');
+  const cards = [document.getElementById('card-0'), document.getElementById('card-1')];
+  const scores = [document.getElementById('score-0'), document.getElementById('score-1')];
+  const tags = [document.getElementById('tag-0'), document.getElementById('tag-1')];
+
+  const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+  if (isTouch) document.body.classList.add('touch');
+
+  /* ---------------- canvas sizing ---------------- */
+
+  const DPR = Math.min(window.devicePixelRatio || 1, 2);
+  let boardPx = 0;
+
+  function setGrid(cols, rows) {
+    if (cols === COLS && rows === ROWS) return;
+    COLS = cols;
+    ROWS = rows;
+    W = COLS * CELL;
+    H = ROWS * CELL;
+    boardPx = 0;              // 强制重新计算画布尺寸
+    layout();
+  }
+
+  function layout() {
+    const box = stageEl.getBoundingClientRect();
+    let avail = Math.min(box.width, box.height);
+    if (!(avail > 60)) avail = Math.min(window.innerWidth, window.innerHeight) * 0.9;
+    const size = Math.max(Math.floor(Math.min(avail, MAX_BOARD) / COLS) * COLS, COLS * 8);
+    if (size === boardPx) return;
+    boardPx = size;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    canvas.width = Math.round(size * DPR);
+    canvas.height = Math.round(size * DPR);
+  }
+
+  /* ---------------- websocket state ---------------- */
+
+  let mode = 'menu';            // 'menu' | 'lan' | 'solo'
+  let ws = null;
+  let myId = null, myColor = null, roomId = null;
+  let players = [];
+  let serverStatus = 'lobby';
+  let snapshot = null;          // last {type:"state"} from the server
+  let overInfo = null;
+  let latency = 0;
+  let joined = false;
+  let connecting = false;
+  let note = '';
+  let pingTimer = null, retryTimer = null;
+
+  const URGENT_AT = 20;                 // 剩余多少秒开始泛红
+  const EMOTE_MS = 2600;                // 表情气泡显示多久
+  const EMOTES = ['😂', '😭', '😎', '🐌', '💀', '👎'];
+  const emoteBubbles = {};              // playerId -> {text, until, total}
+  let roundSeconds = 120;
+  let maxPlayers = 5;
+  let difficulty = 'normal';
+  let fpsFrames = 0, fpsLast = 0, fpsValue = 0;
+
+  const savedName = (() => { try { return localStorage.getItem('snake_name') || ''; } catch { return ''; } })();
+  nameInput.value = savedName;
+
+  function uiState() {
+    if (mode === 'menu') return 'menu';
+    if (mode === 'solo') return 'solo-' + solo.screen;
+    if (!joined) return 'join';
+    if (serverStatus === 'playing') return 'playing';
+    if (serverStatus === 'paused') return 'paused';
+    if (serverStatus === 'over') return 'over';
+    return 'lobby';
+  }
+
+  function send(msg) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
+  function connect(name) {
+    if (connecting) return;
+    if (!location.host) {           // 直接双击打开 index.html 时没有服务器
+      note = '联机对战需要先启动服务器：python server.py';
+      renderOverlay();
+      return;
+    }
+    connecting = true;
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+    ws.onopen = () => {
+      connecting = false;
+      connEl.textContent = '';
+      send({ type: 'join', name });
+      if (!pingTimer) pingTimer = setInterval(() => send({ type: 'ping', time: Date.now() }), 1000);
+    };
+
+    ws.onmessage = ev => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      handle(msg);
+    };
+
+    ws.onclose = () => {
+      connecting = false;
+      if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+      if (joined) {
+        connEl.textContent = '连接已断开，正在重连…';
+        joined = false;
+        serverStatus = 'lobby';
+        if (!retryTimer) retryTimer = setTimeout(() => { retryTimer = null; connect(name); }, 1500);
+      }
+    };
+
+    ws.onerror = () => { connecting = false; };
+  }
+
+  function handle(msg) {
+    switch (msg.type) {
+      case 'welcome':
+        myId = msg.id;
+        myColor = msg.color;
+        roomId = msg.roomId;
+        roundSeconds = msg.roundSeconds || 120;
+        maxPlayers = msg.maxPlayers || 5;
+        difficulty = msg.difficulty || 'normal';
+        MAX_BOARD = 620;                 // 32 格的棋盘要更大才看得清
+        setGrid(msg.cols || 20, msg.rows || 20);
+        layout();
+        joined = true;
+        overInfo = null;
+        break;
+
+      case 'room':
+        players = msg.players || [];
+        serverStatus = msg.status || 'lobby';
+        if (msg.difficulty) difficulty = msg.difficulty;
+        updateHud();
+        renderOverlay();
+        break;
+
+      case 'state':
+        applyState(msg);
+        break;
+
+      case 'kill':
+        pushKillFeed(msg);
+        break;
+
+      case 'emote':
+        emoteBubbles[msg.playerId] = {
+          text: String(msg.emote || ''), until: performance.now() + EMOTE_MS, total: EMOTE_MS,
+        };
+        break;
+
+      case 'over':
+        overInfo = msg;
+        renderOverlay();
+        break;
+
+      case 'pong':
+        latency = Date.now() - msg.time;
+        latencyEl.textContent = latency;
+        break;
+
+      case 'error':
+        note = msg.message;
+        renderOverlay();
+        break;
+    }
+  }
+
+  function pushKillFeed(msg) {
+    const victim = players.find(p => p.id === msg.victimId);
+    if (!victim) return;
+    const killer = msg.killerId ? players.find(p => p.id === msg.killerId) : null;
+    const text =
+      msg.reason === 'body' && killer ? `${killer.name} 撞死了 ${victim.name}` :
+      msg.reason === 'head_on' ? `${victim.name} 跟人撞了个对头` :
+      msg.reason === 'wall' ? `${victim.name} 撞墙自尽` :
+      `${victim.name} 咬到了自己`;
+
+    const el = document.createElement('div');
+    el.className = 'kf' + (msg.victimId === myId ? ' bad' : msg.killerId === myId ? ' good' : '');
+    el.textContent = text;
+    killFeedEl.appendChild(el);
+    setTimeout(() => el.classList.add('out'), 2500);
+    setTimeout(() => el.remove(), 3200);
+    while (killFeedEl.children.length > 4) killFeedEl.firstChild.remove();
+  }
+
+  function applyState(msg) {
+    serverStatus = msg.status;
+
+    // diff against the previous snapshot to drive purely visual effects
+    const now = performance.now();
+    const prevScores = snapshot ? Object.fromEntries(snapshot.snakes.map(s => [s.id, s.score])) : {};
+    const prevAlive = snapshot ? Object.fromEntries(snapshot.snakes.map(s => [s.id, s.alive])) : {};
+
+    for (const s of msg.snakes) {
+      if (prevScores[s.id] !== undefined && s.score > prevScores[s.id]) {
+        const h = s.body[0];
+        if (h) spawnParticles(h[0], h[1]);   // 场上有多个食物，按吃到的蛇头定位最准
+        biteAt[s.id] = now;
+        sfxEat(s.id === myId);
+      }
+      if (prevAlive[s.id] === true && !s.alive && s.id === myId) sfxDie();
+    }
+
+    if (msg.status === 'playing') { startMusic(BATTLE_TRACK, 0.10); note = ''; }
+    if (msg.status === 'paused') pauseMusic();
+
+    snapshot = msg;
+    updateHud();
+    renderOverlay();
+  }
+
+  /* ---------------- HUD ---------------- */
+
+  function fmtTime(sec) {
+    const s = Math.max(0, Math.ceil(sec || 0));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
+  function updateHud() {
+    const lan = mode === 'lan' && joined;
+    const showCards = mode === 'solo';
+
+    cards[0].classList.toggle('hidden', !showCards);
+    cards[1].classList.toggle('hidden', !showCards);
+    boardPanelEl.classList.toggle('hidden', !lan);
+
+    if (!lan) return;
+
+    const t = snapshot ? snapshot.timeLeft : roundSeconds;
+    timerEl.textContent = fmtTime(t);
+    const urgent = !!(snapshot && snapshot.status === 'playing' && t <= URGENT_AT);
+    timerEl.classList.toggle('urgent', urgent);
+    boardEl.classList.toggle('urgent', urgent);
+
+    const rows = players.map(p => {
+      const sn = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === p.id) : null;
+      return { p, score: sn ? sn.score : 0, alive: sn ? sn.alive : true, respawnIn: sn ? sn.respawnIn : 0 };
+    }).sort((a, b) => b.score - a.score || a.p.name.localeCompare(b.p.name));
+
+    scoreboardEl.innerHTML = '';
+    for (const r of rows) {
+      const li = document.createElement('li');
+      li.className = (r.p.id === myId ? 'me ' : '') + (r.alive ? '' : 'dead');
+      const dot = `<span class="sdot" style="color:${r.p.color};background:${r.p.color}"></span>`;
+      const host = r.p.isHost ? '<span class="sres" style="color:var(--neon)">房主</span>' : '';
+      const res = r.alive ? '' : `<span class="sres">复活 ${Math.max(0, r.respawnIn).toFixed(1)}s</span>`;
+      li.innerHTML = `${dot}<span class="sname">${escapeHtml(r.p.name)}${r.p.id === myId ? '（你）' : ''}</span>`
+        + host + res + `<span class="sscore">${r.score}</span>`;
+      scoreboardEl.appendChild(li);
+    }
+    updateSkillBtn();
+    updateEffectBar();
+
+    // 本局开始后才进来的人没有蛇，给他一个「准备下一局」的入口
+    const mySnake = snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
+    const waiting = !mySnake;
+    const meP = players.find(p => p.id === myId);
+    waitBtn.classList.toggle('hidden', !waiting);
+    if (waiting) {
+      const rdy = !!(meP && meP.ready);
+      waitBtn.textContent = rdy ? '已准备 · 等下一局' : '准备下一局';
+      waitBtn.classList.toggle('cool', rdy);
+    }
+  }
+
+  /* ---------------- overlay ---------------- */
+
+  function renderLevelGrid() {
+    levelGrid.innerHTML = '';
+    LEVELS.forEach((L, i) => {
+      const b = document.createElement('button');
+      const locked = i > progress.unlocked;
+      b.className = 'lvlbtn' + (progress.best[i] ? ' cleared' : '');
+      b.disabled = locked;
+      b.innerHTML = `<span class="n">${i + 1}</span><span class="nm">${escapeHtml(L.name)}</span>`;
+      if (!locked) b.addEventListener('click', () => startLevel(i));
+      levelGrid.appendChild(b);
+    });
+  }
+
+  function renderOverlay() {
+    const st = uiState();
+    hudEl.classList.toggle('hidden', st === 'menu' || st === 'solo-levels');
+    emoteBar.classList.toggle('hidden', st !== 'playing');
+    if (st === 'playing' || st === 'solo-playing') { overlay.classList.add('hidden'); return; }
+    overlay.classList.remove('hidden');
+
+    joinRow.classList.toggle('hidden', st !== 'join');
+    plistEl.classList.toggle('hidden', !['lobby', 'paused', 'over'].includes(st));
+    levelGrid.classList.toggle('hidden', st !== 'solo-levels');
+    readyBtn.classList.toggle('hidden', !['lobby', 'over'].includes(st));
+    skinRow.classList.toggle('hidden', !['lobby', 'over'].includes(st));
+    foodLegendEl.classList.toggle('hidden', !['lobby', 'over'].includes(st));
+    skillRow.classList.toggle('hidden', !['lobby', 'over'].includes(st));
+    diffRow.classList.toggle('hidden', !['lobby', 'over'].includes(st));
+
+    primaryBtn.classList.remove('hidden');
+    secondaryBtn.classList.remove('hidden');
+    primaryBtn.disabled = false;
+    secondaryBtn.disabled = false;
+    readyBtn.disabled = false;
+    badgeEl.textContent = '';
+
+    if (st === 'menu') {
+      titleEl.textContent = '贪吃蛇';
+      subEl.textContent = '选择玩法';
+      primaryBtn.textContent = '联机对战';
+      secondaryBtn.textContent = '单人闯关';
+
+    } else if (st === 'join') {
+      titleEl.textContent = '联机对战';
+      subEl.textContent = isTouch ? '最多 2 人 · 同一局域网' : '最多 2 人 · 同一局域网 · WASD 移动';
+      primaryBtn.textContent = '进入房间';
+      secondaryBtn.textContent = '返回主菜单';
+
+    } else if (st === 'lobby') {
+      const me = players.find(p => p.id === myId);
+      const host = players.find(p => p.isHost);
+      const isHost = !!host && host.id === myId;
+      const alone = players.length === 1;
+      const canStart = alone || (players.length >= 2 && players.every(p => p.ready));
+      titleEl.textContent = '房间 ' + (roomId || '');
+      subEl.textContent = alone
+        ? '只有你一个人 · 房主可以直接开局测试特殊食物和技能'
+        : players.length < maxPlayers && !players.every(p => p.ready)
+          ? `等待其他玩家加入或准备…（${players.length}/${maxPlayers}）`
+          : isHost
+            ? (canStart ? '所有人都准备好了，可以开始' : '等待所有玩家准备')
+            : (me && me.ready ? '已准备，等待房主开始' : '点击「准备」参加本局');
+      badgeEl.textContent = '大厅';
+      primaryBtn.textContent = isHost ? (alone ? '开始游戏（单人测试）' : '开始游戏') : '等待房主';
+      primaryBtn.disabled = !isHost || !canStart;
+      readyBtn.textContent = me && me.ready ? '取消准备' : '准备';
+      secondaryBtn.textContent = '离开房间';
+      renderSkinRow();
+      renderSkillRow();
+      renderDiffRow();
+      renderPlayerList();
+
+    } else if (st === 'paused') {
+      titleEl.textContent = '已暂停';
+      subEl.textContent = '按 空格 继续';
+      primaryBtn.textContent = '继续';
+      secondaryBtn.textContent = '离开房间';
+
+    } else if (st === 'over') {
+      const me = players.find(p => p.id === myId);
+      const host = players.find(p => p.isHost);
+      const isHost = !!host && host.id === myId;
+      const allReady = players.length >= 2 && players.every(p => p.ready);
+      const alone = players.length === 1;
+      const canStart = alone || allReady;
+      const rank = (overInfo && overInfo.ranking) || [];
+      const mySnake = snapshot && snapshot.snakes.find(s => s.id === myId);
+
+      let title = '本局结束', tail = '';
+      if (overInfo && overInfo.winnerId) {
+        const w = rank.find(x => x.id === overInfo.winnerId)
+          || players.find(p => p.id === overInfo.winnerId);
+        title = w ? `${w.name} 获胜` : '本局结束';
+        tail = overInfo.winnerId === myId ? '你赢了！' : '再来一局？';
+      } else {
+        title = '平局';
+        tail = '最高分持平';
+      }
+      titleEl.textContent = title;
+
+      const place = rank.findIndex(x => x.id === myId);
+      subEl.textContent = (mySnake ? `你的得分 ${mySnake.score}` : '')
+        + (place >= 0 ? ` · 第 ${place + 1} 名` : '')
+        + (tail ? ' · ' + tail : '')
+        + (players.length >= 2 && !allReady ? ' · 准备后房主可再开一局' : '');
+      badgeEl.textContent = overInfo && overInfo.reason === 'disconnect' ? 'DISCONNECT' : 'TIME UP';
+      primaryBtn.textContent = isHost ? (alone ? '再来一局（单人测试）' : '再来一局') : '等待房主';
+      primaryBtn.disabled = !isHost || !canStart;
+      readyBtn.textContent = me && me.ready ? '取消准备' : '准备';
+      secondaryBtn.textContent = '离开房间';
+      renderSkinRow();
+      renderSkillRow();
+      renderDiffRow();
+      renderPlayerList();
+
+    } else if (st === 'solo-levels') {
+      titleEl.textContent = '单人闯关';
+      subEl.textContent = `已解锁 ${progress.unlocked + 1}/${LEVELS.length} 关 · 选择关卡`;
+      badgeEl.textContent = '闯关';
+      primaryBtn.classList.add('hidden');
+      secondaryBtn.textContent = '返回主菜单';
+      renderLevelGrid();
+
+    } else if (st === 'solo-paused') {
+      titleEl.textContent = '已暂停';
+      subEl.textContent = `第 ${solo.levelIndex + 1} 关 · ${LEVELS[solo.levelIndex].name}`;
+      primaryBtn.textContent = '继续';
+      secondaryBtn.textContent = '返回选关';
+
+    } else if (st === 'solo-cleared') {
+      const last = solo.levelIndex >= LEVELS.length - 1;
+      const best = progress.best[solo.levelIndex];
+      titleEl.textContent = last ? '全部通关！' : '过关';
+      subEl.textContent = `第 ${solo.levelIndex + 1} 关 · 用时 ${Math.round(solo.elapsed * 10) / 10}s`
+        + (best ? ` · 最佳 ${best}s` : '');
+      badgeEl.textContent = last ? 'ALL CLEAR' : 'CLEAR';
+      primaryBtn.textContent = last ? '回到选关' : '下一关';
+      secondaryBtn.textContent = '重玩本关';
+
+    } else {
+      titleEl.textContent = '关卡失败';
+      subEl.textContent = `第 ${solo.levelIndex + 1} 关 · ${solo.failReason}`;
+      badgeEl.textContent = 'FAILED';
+      primaryBtn.textContent = '重试';
+      secondaryBtn.textContent = '返回选关';
+    }
+
+    if (note) subEl.textContent = note;
+    renderPlayerList();
+  }
+
+  function renderSkinRow() {
+    const me = players.find(p => p.id === myId);
+    skinRow.innerHTML = '';
+    SKINS.forEach((sk, i) => {
+      const b = document.createElement('button');
+      b.title = sk.name;
+      if (me && me.skin === i) b.className = 'sel';
+      b.innerHTML = `<span class="sw" style="background:${sk.color};box-shadow:0 0 10px ${sk.color}"></span>`;
+      b.addEventListener('click', () => send({ type: 'skin', skin: i }));
+      skinRow.appendChild(b);
+    });
+  }
+
+  function renderSkillRow() {
+    const me = players.find(p => p.id === myId);
+    skillRow.innerHTML = '';
+    for (const key of Object.keys(SKILL_META)) {
+      const b = document.createElement('button');
+      b.textContent = `${SKILL_META[key].icon} ${SKILL_META[key].label}`;
+      b.title = SKILL_META[key].desc;
+      if (me && me.skill === key) b.className = 'sel';
+      b.addEventListener('click', () => send({ type: 'setskill', skill: key }));
+      skillRow.appendChild(b);
+    }
+    const hint = document.createElement('div');
+    hint.className = 'phint';
+    const mine = me ? SKILL_META[me.skill] : null;
+    hint.textContent = mine
+      ? `技能：${mine.label} · ${mine.desc}（对局中按 E 释放，冷却 25s）`
+      : '选择技能';
+    skillRow.appendChild(hint);
+  }
+
+  function renderDiffRow() {
+    const host = players.find(p => p.isHost);
+    const isHost = !!host && host.id === myId;
+    diffRow.innerHTML = '';
+    for (const key of Object.keys(DIFF_META)) {
+      const b = document.createElement('button');
+      b.textContent = DIFF_META[key].label;
+      b.title = DIFF_META[key].desc;
+      if (difficulty === key) b.className = 'sel';
+      b.disabled = !isHost;
+      b.addEventListener('click', () => send({ type: 'difficulty', value: key }));
+      diffRow.appendChild(b);
+    }
+    const hint = document.createElement('div');
+    hint.className = 'phint';
+    const d = DIFF_META[difficulty] || DIFF_META.normal;
+    hint.textContent = (isHost ? '难度（房主可改）：' : '难度（房主设定）：') + d.desc;
+    diffRow.appendChild(hint);
+  }
+
+  function updateSkillBtn() {
+    const show = mode === 'lan' && joined && (serverStatus === 'playing' || serverStatus === 'paused');
+    skillBtn.classList.toggle('hidden', !show);
+    if (!show) return;
+    const me = players.find(p => p.id === myId);
+    const meta = me ? SKILL_META[me.skill] : null;
+    const icon = meta ? meta.icon : '⚡';
+    const sn = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
+    const cd = sn ? sn.skillCd : 0;
+
+    if (cd > 0) {
+      // 冷却中：按钮里有一道从左往右回满的进度条
+      const pct = Math.max(0, Math.min(100, 100 * (1 - cd / SKILL_CD_MAX)));
+      skillBtn.classList.add('cool');
+      skillBtn.style.setProperty('--fill', pct + '%');
+      skillBtn.innerHTML = `<span class="ic">${icon}</span>${cd.toFixed(1)}s`;
+    } else {
+      skillBtn.classList.remove('cool');
+      skillBtn.style.setProperty('--fill', '100%');
+      skillBtn.innerHTML = `<span class="ic">${icon}</span>${meta ? meta.label : '技能'} · E`;
+    }
+  }
+
+  function updateEffectBar() {
+    const sn = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
+    if (!sn) { effectBar.innerHTML = ''; return; }
+    const rows = [];
+    if (sn.ghost > 0) rows.push(['ghost', `隐身 ${sn.ghost.toFixed(1)}s`]);
+    if (sn.shield > 0) rows.push(['shield', `无敌 ${sn.shield.toFixed(1)}s`]);
+    if (sn.slow > 0) rows.push(['slow', `被减速 ${sn.slow.toFixed(1)}s`]);
+    effectBar.innerHTML = rows.map(([c, t]) => `<span class="eff ${c}">${t}</span>`).join('');
+  }
+
+  function renderEmoteBar() {
+    if (emoteBar.childElementCount) return;
+    for (const e of EMOTES) {
+      const b = document.createElement('button');
+      b.textContent = e;
+      b.addEventListener('click', ev => { ev.stopPropagation(); send({ type: 'emote', emote: e }); });
+      emoteBar.appendChild(b);
+    }
+  }
+
+  function renderPlayerList() {
+    const total = mode === 'lan' ? maxPlayers : 2;
+    plistEl.innerHTML = '';
+    for (let i = 0; i < total; i++) {
+      const p = players[i];
+      const li = document.createElement('li');
+      if (!p) {
+        li.className = 'slot';
+        li.innerHTML = '<span class="dot"></span><span>空位</span>';
+      } else {
+        const tag = [p.id === myId ? '（你）' : '', p.isHost ? '房主' : '', p.ready ? '已准备' : '']
+          .filter(Boolean).join(' · ');
+        li.innerHTML = `<span class="dot" style="--pc:${p.color};background:${p.color}"></span>`
+          + `<span>${escapeHtml(p.name)}</span>`
+          + `<span class="host">${tag}</span>`;
+      }
+      plistEl.appendChild(li);
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  /* ---------------- input ---------------- */
+
+  function leaveRoom() {
+    if (ws) {
+      ws.onclose = null;          // 主动离开，不要触发自动重连
+      try { ws.close(); } catch {}
+      ws = null;
+    }
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    joined = false; myId = null; myColor = null; roomId = null;
+    players = []; serverStatus = 'lobby'; snapshot = null; overInfo = null;
+  }
+
+  function gotoMenu() {
+    stopSoloTimer();
+    pauseMusic();
+    leaveRoom();
+    MAX_BOARD = 460;
+    setGrid(20, 20);
+    mode = 'menu';
+    updateHud();
+    renderOverlay();
+  }
+
+  primaryBtn.addEventListener('click', () => {
+    note = '';
+    const st = uiState();
+
+    if (st === 'menu') { mode = 'lan'; renderOverlay(); return; }
+
+    if (st === 'join') {
+      const name = (nameInput.value || '').trim().slice(0, 16) || '玩家';
+      try { localStorage.setItem('snake_name', name); } catch {}
+      ensureAudio();
+      connect(name);
+      return;
+    }
+    if (st === 'lobby') { send({ type: 'start' }); return; }
+    if (st === 'paused') { send({ type: 'pause' }); return; }
+    if (st === 'over') { send({ type: 'restart' }); return; }
+
+    if (st === 'solo-levels') { gotoMenu(); return; }
+    if (st === 'solo-paused') { soloPauseToggle(); return; }
+    if (st === 'solo-failed') { startLevel(solo.levelIndex); return; }
+    if (st === 'solo-cleared') {
+      if (solo.levelIndex >= LEVELS.length - 1) { solo.screen = 'levels'; renderOverlay(); }
+      else startLevel(solo.levelIndex + 1);
+      return;
+    }
+  });
+
+  secondaryBtn.addEventListener('click', () => {
+    note = '';
+    const st = uiState();
+
+    if (st === 'menu') {
+      ensureAudio();               // 用户手势里建 AudioContext
+      MAX_BOARD = 460;             // 单人用 20×20 的小棋盘
+      setGrid(20, 20);
+      mode = 'solo';
+      solo.screen = 'levels';
+      updateHud();
+      updateSoloHud();
+      renderOverlay();
+      return;
+    }
+    if (st === 'solo-levels') { gotoMenu(); return; }
+    if (st === 'solo-paused' || st === 'solo-failed') {
+      stopSoloTimer();
+      solo.screen = 'levels';
+      renderOverlay();
+      return;
+    }
+    if (st === 'solo-cleared') { startLevel(solo.levelIndex); return; }
+
+    gotoMenu();                    // 联机各状态下的「离开房间 / 返回主菜单」
+  });
+
+  readyBtn.addEventListener('click', () => {
+    note = '';
+    const me = players.find(p => p.id === myId);
+    send({ type: 'ready', ready: !(me && me.ready) });
+  });
+
+  skillBtn.addEventListener('click', () => {
+    note = '';
+    if (mode === 'lan') send({ type: 'skill' });
+  });
+
+  waitBtn.addEventListener('click', () => {
+    note = '';
+    const me = players.find(p => p.id === myId);
+    send({ type: 'ready', ready: !(me && me.ready) });
+  });
+
+  nameInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); primaryBtn.click(); }
+    e.stopPropagation();
+  });
+
+  const KEYMAP = {
+    w: 'up', s: 'down', a: 'left', d: 'right',
+    arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right',
+  };
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) return;
+
+    const k = e.key.toLowerCase();
+    const st = uiState();
+
+    if (k === ' ') {
+      e.preventDefault();
+      if (mode === 'solo') soloPauseToggle();
+      else send({ type: 'pause' });
+      return;
+    }
+    if (k === 'r') {
+      e.preventDefault();
+      if (mode === 'solo') {
+        if (st === 'solo-playing' || st === 'solo-paused' || st === 'solo-failed') startLevel(solo.levelIndex);
+      } else {
+        send({ type: 'restart' });
+      }
+      return;
+    }
+    if (k === 'e') {
+      e.preventDefault();
+      if (mode === 'lan') send({ type: 'skill' });
+      return;
+    }
+    const dir = KEYMAP[k];
+    if (!dir) return;
+    e.preventDefault();
+    if (mode === 'solo') soloInput(dir);
+    else if (st === 'playing') send({ type: 'input', dir });
+  });
+
+  // --- swipe steering (the server owns movement; this only sends input) ---
+  const SWIPE_MIN = 24;
+  let swipeAnchor = null;
+
+  document.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { swipeAnchor = null; return; }
+    swipeAnchor = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length !== 1 || !swipeAnchor) return;
+    const st = uiState();
+    if (st !== 'playing' && st !== 'solo-playing') return;
+    const t = e.touches[0];
+    const dx = t.clientX - swipeAnchor.x, dy = t.clientY - swipeAnchor.y;
+    if (Math.hypot(dx, dy) < SWIPE_MIN) return;
+    const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+    if (mode === 'solo') soloInput(dir);
+    else send({ type: 'input', dir });
+    swipeAnchor = { x: t.clientX, y: t.clientY };
+  }, { passive: true });
+
+  document.addEventListener('touchend', () => { swipeAnchor = null; }, { passive: true });
+
+  // block browser touch gestures
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+    document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+  document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+  document.addEventListener('touchmove', e => {
+    if (e.target === nameInput) return;                              // 名字输入框正常滚动
+    if (e.target.closest && e.target.closest('.ovscroll')) return;   // 大厅内容超出时可以滚动
+    e.preventDefault();
+  }, { passive: false });
+
+  /* ---------------- WebAudio (all synthesised, no assets) ---------------- */
+
+  const MUSIC_VOL = 0.15;
+  const CHORD_STEPS = 8;
+
+  const hz = n => 440 * Math.pow(2, (n - 69) / 12);   // MIDI 音高 -> 频率
+  const chord = (midi, minor) => ({
+    root: hz(midi - 24),
+    tones: [hz(midi), hz(midi + (minor ? 3 : 4)), hz(midi + 7)],
+  });
+
+  // 十组不同的和弦进行，每关一组（不是同一段音乐调快慢）
+  const PROGS = [
+    [chord(57, true), chord(53, false), chord(48, false), chord(55, false)],   // Am F C G
+    [chord(57, true), chord(55, false), chord(53, false), chord(52, false)],   // Am G F E
+    [chord(50, true), chord(46, false), chord(53, false), chord(48, false)],   // Dm Bb F C
+    [chord(52, true), chord(48, false), chord(55, false), chord(50, false)],   // Em C G D
+    [chord(57, true), chord(50, true), chord(53, false), chord(52, false)],    // Am Dm F E
+    [chord(48, false), chord(55, false), chord(57, true), chord(53, false)],   // C G Am F
+    [chord(52, true), chord(48, false), chord(50, false), chord(55, false)],   // Em C D G
+    [chord(53, false), chord(48, false), chord(50, true), chord(46, false)],   // F C Dm Bb
+    [chord(50, true), chord(52, true), chord(53, false), chord(55, false)],    // Dm Em F G
+    [chord(52, true), chord(53, false), chord(55, false), chord(57, true)],    // Em F G Am
+  ];
+
+  // 逐关变激昂：BPM 92→152、鼓组从只有底鼓到 16 分密集鼓、低通 1500→5200Hz、
+  // 低音方波→锯齿、琶音从单音到八度叠加
+  const TRACKS = [
+    { bpm:  92, prog: 0, kick: [0, 4],             snare: [],           hat: [],                    bass: 'square',   lead: 0, cutoff: 1500 },
+    { bpm: 100, prog: 1, kick: [0, 4],             snare: [4],          hat: [2, 6],                bass: 'square',   lead: 0, cutoff: 1900 },
+    { bpm: 108, prog: 2, kick: [0, 4],             snare: [4],          hat: [1, 3, 5, 7],          bass: 'square',   lead: 1, cutoff: 2300 },
+    { bpm: 114, prog: 3, kick: [0, 2, 4, 6],       snare: [4],          hat: [1, 3, 5, 7],          bass: 'triangle', lead: 1, cutoff: 2700 },
+    { bpm: 120, prog: 4, kick: [0, 2, 4, 6],       snare: [2, 6],       hat: [1, 3, 5, 7],          bass: 'sawtooth', lead: 1, cutoff: 3100 },
+    { bpm: 126, prog: 5, kick: [0, 2, 4, 6],       snare: [2, 6],       hat: [1, 2, 3, 5, 6, 7],    bass: 'sawtooth', lead: 2, cutoff: 3400 },
+    { bpm: 132, prog: 6, kick: [0, 2, 3, 4, 6],    snare: [2, 6],       hat: [1, 2, 3, 5, 6, 7],    bass: 'sawtooth', lead: 2, cutoff: 3700 },
+    { bpm: 138, prog: 7, kick: [0, 2, 3, 4, 6],    snare: [2, 4, 6],    hat: [1, 2, 3, 4, 5, 6, 7], bass: 'sawtooth', lead: 2, cutoff: 4100 },
+    { bpm: 144, prog: 8, kick: [0, 1, 2, 4, 5, 6], snare: [2, 4, 6],    hat: [1, 2, 3, 4, 5, 6, 7], bass: 'sawtooth', lead: 3, cutoff: 4500 },
+    { bpm: 152, prog: 9, kick: [0, 1, 2, 3, 4, 5, 6, 7], snare: [1, 3, 5, 7], hat: [1, 2, 3, 4, 5, 6, 7], bass: 'sawtooth', lead: 3, cutoff: 5200 },
+  ].map(t => ({ ...t, step: 60 / t.bpm / 4, loopSteps: PROGS[t.prog].length * CHORD_STEPS }));
+
+  // 联机对战用的音轨：刻意做得稀疏、音量也更低 ——
+  // 5 个人同时在吃食物，音乐再密就跟音效糊成一团了
+  const BATTLE_TRACK = {
+    bpm: 96, prog: 0, kick: [0, 4], snare: [], hat: [3, 7],
+    bass: 'triangle', lead: 0, cutoff: 2400,
+  };
+  BATTLE_TRACK.step = 60 / BATTLE_TRACK.bpm / 4;
+  BATTLE_TRACK.loopSteps = PROGS[0].length * CHORD_STEPS;
+
+  let wantTrack = BATTLE_TRACK;
+  let audio = null;
+
+  function ensureAudio() {
+    if (audio) {
+      if (audio.actx.state === 'suspended') audio.actx.resume();
+      return audio;
+    }
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    const actx = new Ctx();
+    const master = actx.createGain();
+    master.gain.value = 0.9;
+    master.connect(actx.destination);
+    const tone = actx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = wantTrack.cutoff;
+    tone.connect(master);
+    const musicBus = actx.createGain();
+    musicBus.gain.value = 0;
+    musicBus.connect(tone);
+    const sfxBus = actx.createGain();
+    sfxBus.gain.value = 1;
+    sfxBus.connect(tone);
+    audio = { actx, tone, musicBus, sfxBus, track: wantTrack, step: 0, nextStep: 0, timer: null, muted: false };
+    return audio;
+  }
+
+  // 换曲不重启调度器，只换参数，避免爆音
+  function useTrack(track) {
+    wantTrack = track;
+    if (!audio || audio.track === track) return;
+    audio.track = track;
+    audio.tone.frequency.setTargetAtTime(track.cutoff, audio.actx.currentTime, 0.08);
+  }
+
+  let noise = null;
+  function noiseBuffer(a) {
+    if (noise) return noise;
+    const len = Math.floor(a.actx.sampleRate * 0.2);
+    const buf = a.actx.createBuffer(1, len, a.actx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    noise = buf;
+    return buf;
+  }
+
+  function blip(a, time, freq, dur, type, gain) {
+    const o = a.actx.createOscillator(), g = a.actx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, time);
+    g.gain.setValueAtTime(0.0001, time);
+    g.gain.linearRampToValueAtTime(gain, time + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+    o.connect(g).connect(a.musicBus);
+    o.start(time); o.stop(time + dur + 0.02);
+  }
+
+  function kick(a, time) {
+    const o = a.actx.createOscillator(), g = a.actx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, time);
+    o.frequency.exponentialRampToValueAtTime(38, time + 0.12);
+    g.gain.setValueAtTime(0.5, time);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.22);
+    o.connect(g).connect(a.musicBus);
+    o.start(time); o.stop(time + 0.25);
+  }
+
+  function hat(a, time) {
+    const src = a.actx.createBufferSource();
+    src.buffer = noiseBuffer(a);
+    const hp = a.actx.createBiquadFilter();
+    hp.type = 'highpass'; hp.frequency.value = 7200;
+    const g = a.actx.createGain();
+    g.gain.setValueAtTime(0.05, time);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.045);
+    src.connect(hp).connect(g).connect(a.musicBus);
+    src.start(time); src.stop(time + 0.06);
+  }
+
+  function snare(a, time) {
+    const src = a.actx.createBufferSource();
+    src.buffer = noiseBuffer(a);
+    const bp = a.actx.createBiquadFilter();
+    bp.type = 'bandpass'; bp.frequency.value = 1900; bp.Q.value = 0.7;
+    const g = a.actx.createGain();
+    g.gain.setValueAtTime(0.10, time);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + 0.13);
+    src.connect(bp).connect(g).connect(a.musicBus);
+    src.start(time); src.stop(time + 0.15);
+  }
+
+  function scheduleStep(a, step, time) {
+    const t = a.track;
+    const ch = PROGS[t.prog][Math.floor(step / CHORD_STEPS) % PROGS[t.prog].length];
+    const i = step % CHORD_STEPS;
+
+    if (t.kick.includes(i)) kick(a, time);
+    if (t.snare.includes(i)) snare(a, time);
+    if (t.hat.includes(i)) hat(a, time);
+
+    if (i % 2 === 0) blip(a, time, ch.root, 0.16, t.bass, 0.28);
+
+    // 琶音按 lead 等级逐渐加厚：单音 -> 八度跳进 -> 加三度 -> 再加高八度点缀
+    const tone = ch.tones[i % ch.tones.length];
+    const hi = tone * (i >= 4 ? 2 : 1);
+    if (t.lead === 0) {
+      if (i % 2 === 0) blip(a, time, tone, 0.12, 'square', 0.085);
+    } else if (t.lead === 1) {
+      blip(a, time, hi, 0.11, 'square', 0.09);
+    } else if (t.lead === 2) {
+      blip(a, time, hi, 0.10, 'square', 0.085);
+      if (i % 2 === 0) blip(a, time, tone * 2, 0.08, 'triangle', 0.05);
+    } else {
+      blip(a, time, hi, 0.09, 'square', 0.085);
+      blip(a, time, tone * 2, 0.08, 'triangle', 0.055);
+      if (i % 4 === 3) blip(a, time, tone * 4, 0.06, 'square', 0.04);
+    }
+  }
+
+  function pump() {
+    if (!audio) return;
+    const t = audio.track;
+    if (audio.nextStep < audio.actx.currentTime) audio.nextStep = audio.actx.currentTime + 0.05;
+    const ahead = audio.actx.currentTime + 0.12;
+    while (audio.nextStep < ahead) {
+      scheduleStep(audio, audio.step, audio.nextStep);
+      audio.nextStep += t.step;
+      audio.step = (audio.step + 1) % t.loopSteps;
+    }
+  }
+
+  function fadeMusic(to, secs) {
+    if (!audio) return;
+    const t = audio.actx.currentTime, p = audio.musicBus.gain;
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(Math.max(p.value, 0.0001), t);
+    p.linearRampToValueAtTime(Math.max(to, 0.0001), t + secs);
+  }
+
+  function startMusic(track, vol) {
+    if (track) useTrack(track);
+    const a = ensureAudio();
+    if (!a) return;
+    if (a.actx.state === 'suspended') a.actx.resume();
+    fadeMusic(vol == null ? MUSIC_VOL : vol, 0.9);
+    if (!a.timer) a.timer = setInterval(pump, 25);
+  }
+
+  function pauseMusic() { fadeMusic(0.0001, 0.18); }
+
+  const EAT_SFX_GAP = 70;      // 两次吃食物音效的最小间隔（毫秒）
+  let lastEatAt = 0;
+
+  // mine = 自己吃的：满音量；别人的轻很多。多人同时吃时再做一次全局节流。
+  function sfxEat(mine) {
+    if (!audio) return;
+    const now = performance.now();
+    if (now - lastEatAt < EAT_SFX_GAP) return;
+    lastEatAt = now;
+
+    const t = audio.actx.currentTime;
+    const o = audio.actx.createOscillator(), g = audio.actx.createGain();
+    o.type = 'square';
+    o.frequency.setValueAtTime(1046.5, t);
+    o.frequency.setValueAtTime(1568.0, t + 0.05);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(mine ? 0.18 : 0.05, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+    o.connect(g).connect(audio.sfxBus);
+    o.start(t); o.stop(t + 0.17);
+  }
+
+  function sfxDie() {
+    if (!audio) return;
+    const t = audio.actx.currentTime, dur = 1.2;
+    const o = audio.actx.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(190, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + dur);
+
+    const trem = audio.actx.createGain();
+    trem.gain.value = 0.55;
+    const lfo = audio.actx.createOscillator(), amt = audio.actx.createGain();
+    lfo.type = 'square';
+    lfo.frequency.setValueAtTime(19, t);
+    lfo.frequency.linearRampToValueAtTime(6, t + dur);
+    amt.gain.value = 0.45;
+    lfo.connect(amt).connect(trem.gain);
+
+    const lp = audio.actx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(900, t);
+    lp.frequency.exponentialRampToValueAtTime(160, t + dur);
+
+    const g = audio.actx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.45, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+
+    o.connect(trem).connect(lp).connect(g).connect(audio.sfxBus);
+    o.start(t); o.stop(t + dur);
+    lfo.start(t); lfo.stop(t + dur);
+  }
+
+  // 过关的小号角
+  function sfxClear() {
+    if (!audio) return;
+    const t0 = audio.actx.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+      const o = audio.actx.createOscillator(), g = audio.actx.createGain();
+      const t = t0 + i * 0.09;
+      o.type = 'square';
+      o.frequency.setValueAtTime(f, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.15, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+      o.connect(g).connect(audio.sfxBus);
+      o.start(t); o.stop(t + 0.24);
+    });
+  }
+
+  /* ---------------- 单人闯关 ---------------- */
+
+  const LEVELS = [
+    { name: '热身',       type: 'classic', speed: 200, goal: 5 },
+    { name: '加速',       type: 'classic', speed: 170, goal: 8 },
+    { name: '迷宫入门',   type: 'maze',    speed: 170, goal: 6,  obstacles: 6 },
+    { name: '第一只箱子', type: 'box',     speed: 180, boxes: [[12, 10]],                       targets: [[16, 10]] },
+    { name: '疾走',       type: 'classic', speed: 145, goal: 10 },
+    { name: '迷阵',       type: 'maze',    speed: 145, goal: 8,  obstacles: 12 },
+    { name: '双箱',       type: 'box',     speed: 160, boxes: [[12, 8], [12, 12]],             targets: [[16, 8], [16, 12]] },
+    { name: '铁壁',       type: 'maze',    speed: 125, goal: 10, obstacles: 18 },
+    { name: '极速',       type: 'classic', speed: 110, goal: 12 },
+    { name: '终局',       type: 'box',     speed: 140, boxes: [[10, 6], [12, 10], [10, 14]],  targets: [[16, 6], [16, 10], [16, 14]] },
+  ];
+
+  const DIRS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+  const OPPOSITE = { up: 'down', down: 'up', left: 'right', right: 'left' };
+  const SOLO_COLOR = '#22e6ff';
+  const SOLO_KEY = 'snake_solo_progress';
+  const cellKey = (x, y) => x + ',' + y;
+
+  function loadProgress() {
+    try {
+      const p = JSON.parse(localStorage.getItem(SOLO_KEY));
+      if (p && typeof p.unlocked === 'number') return { unlocked: p.unlocked, best: p.best || {} };
+    } catch {}
+    return { unlocked: 0, best: {} };
+  }
+  function saveProgress(p) { try { localStorage.setItem(SOLO_KEY, JSON.stringify(p)); } catch {} }
+  let progress = loadProgress();
+
+  const solo = {
+    levelIndex: 0,
+    screen: 'levels',      // levels | playing | paused | cleared | failed
+    body: [], direction: 'right', queue: [],
+    food: null,
+    obstacles: [], boxes: [], targets: [],
+    power: 1,              // 力度：单次推动格数，每吃一个食物 +1
+    eaten: 0,
+    elapsed: 0,
+    failReason: '',
+    timer: null,
+  };
+
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  // 从 from 出发，所有非障碍格子是否都可达
+  function fullyConnected(from, obstacles) {
+    const seen = new Set([cellKey(from[0], from[1])]);
+    const q = [from];
+    while (q.length) {
+      const [x, y] = q.shift();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) continue;
+        const k = cellKey(nx, ny);
+        if (seen.has(k) || obstacles.has(k)) continue;
+        seen.add(k);
+        q.push([nx, ny]);
+      }
+    }
+    return seen.size === COLS * ROWS - obstacles.size;
+  }
+
+  // 逐个放障碍，任何会切断连通性的位置直接放弃 —— 保证不会把食物封在墙后
+  function makeObstacles(count, body) {
+    const reserved = new Set(body.map(c => cellKey(c[0], c[1])));
+    for (let x = 0; x <= 8; x++) reserved.add(cellKey(x, 10));   // 出生通道留空
+
+    const pool = [];
+    for (let y = 1; y < ROWS - 1; y++)
+      for (let x = 1; x < COLS - 1; x++)
+        if (!reserved.has(cellKey(x, y))) pool.push([x, y]);
+    shuffle(pool);
+
+    const placed = [];
+    const set = new Set();
+    for (const [x, y] of pool) {
+      if (placed.length >= count) break;
+      set.add(cellKey(x, y));
+      if (fullyConnected(body[0], set)) placed.push([x, y]);
+      else set.delete(cellKey(x, y));
+    }
+    return placed;
+  }
+
+  function placeSoloFood() {
+    const used = new Set();
+    for (const c of solo.body) used.add(cellKey(c[0], c[1]));
+    for (const o of solo.obstacles) used.add(cellKey(o[0], o[1]));
+    for (const b of solo.boxes) used.add(cellKey(b.x, b.y));
+    for (const t of solo.targets) used.add(cellKey(t.x, t.y));
+
+    const free = [];
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++)
+        if (!used.has(cellKey(x, y))) free.push([x, y]);
+    solo.food = free.length ? free[Math.floor(Math.random() * free.length)] : null;
+  }
+
+  function startLevel(i) {
+    solo.levelIndex = Math.max(0, Math.min(i, LEVELS.length - 1));
+    const L = LEVELS[solo.levelIndex];
+
+    solo.screen = 'playing';
+    solo.body = [[4, 10], [3, 10], [2, 10]];
+    solo.direction = 'right';
+    solo.queue = [];
+    solo.power = 1;
+    solo.eaten = 0;
+    solo.elapsed = 0;
+    solo.failReason = '';
+    solo.obstacles = L.type === 'maze' ? makeObstacles(L.obstacles, solo.body) : [];
+    solo.boxes = (L.boxes || []).map(([x, y]) => ({ x, y, onTarget: false }));
+    solo.targets = (L.targets || []).map(([x, y]) => ({ x, y }));
+    for (const b of solo.boxes) b.onTarget = solo.targets.some(t => t.x === b.x && t.y === b.y);
+
+    placeSoloFood();
+    restartSoloTimer();
+    startMusic(TRACKS[solo.levelIndex]);
+    updateHud();          // 切回单人时要重新显示两张卡片、收起联机记分板
+    renderOverlay();
+    updateSoloHud();
+  }
+
+  function restartSoloTimer() {
+    clearInterval(solo.timer);
+    solo.timer = setInterval(soloStep, LEVELS[solo.levelIndex].speed);
+  }
+
+  function stopSoloTimer() {
+    clearInterval(solo.timer);
+    solo.timer = null;
+  }
+
+  function soloInput(dir) {
+    if (solo.screen !== 'playing' || !DIRS[dir]) return;
+    const last = solo.queue.length ? solo.queue[solo.queue.length - 1] : solo.direction;
+    if (dir === last || dir === OPPOSITE[last]) return;   // 同向无意义，反向非法
+    if (solo.queue.length < 2) solo.queue.push(dir);
+  }
+
+  // 推箱子：最多推 power 格，遇到墙/障碍/别的箱子就停；落到目标点即锁定
+  function pushBox(box, d) {
+    if (box.onTarget) return false;
+
+    const blocked = new Set();
+    for (const b of solo.boxes) if (b !== box) blocked.add(cellKey(b.x, b.y));
+    for (const c of solo.body) blocked.add(cellKey(c[0], c[1]));
+    for (const o of solo.obstacles) blocked.add(cellKey(o[0], o[1]));
+
+    let cx = box.x, cy = box.y, steps = 0;
+    while (steps < solo.power) {
+      const tx = cx + d.x, ty = cy + d.y;
+      if (tx < 0 || ty < 0 || tx >= COLS || ty >= ROWS) break;
+      if (blocked.has(cellKey(tx, ty))) break;
+      cx = tx; cy = ty; steps++;
+      if (solo.targets.some(t => t.x === cx && t.y === cy)) break;
+    }
+    if (steps === 0) return false;
+
+    box.x = cx;
+    box.y = cy;
+    box.onTarget = solo.targets.some(t => t.x === box.x && t.y === box.y);
+    return true;
+  }
+
+  function soloStep() {
+    const L = LEVELS[solo.levelIndex];
+    if (solo.screen !== 'playing') return;
+    solo.elapsed += L.speed / 1000;
+
+    if (solo.queue.length) solo.direction = solo.queue.shift();
+    const d = DIRS[solo.direction];
+    const head = solo.body[0];
+    const nx = head[0] + d.x, ny = head[1] + d.y;
+
+    if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) return soloFail('撞到墙了');
+    if (solo.obstacles.some(o => o[0] === nx && o[1] === ny)) return soloFail('撞到障碍');
+
+    const box = solo.boxes.find(b => b.x === nx && b.y === ny);
+    if (box && !pushBox(box, d)) return soloFail('箱子推不动');
+
+    const grow = !!solo.food && nx === solo.food[0] && ny === solo.food[1];
+    const tail = grow ? solo.body : solo.body.slice(0, -1);
+    if (tail.some(c => c[0] === nx && c[1] === ny)) return soloFail('撞到自己');
+
+    solo.body.unshift([nx, ny]);
+    if (grow) {
+      solo.eaten++;
+      solo.power++;
+      spawnParticles(nx, ny);
+      biteAt.solo = performance.now();
+      sfxEat(true);
+      solo.food = null;
+    } else {
+      solo.body.pop();
+    }
+
+    if (!solo.food) placeSoloFood();
+
+    if (L.type === 'box') {
+      if (solo.boxes.length && solo.boxes.every(b => b.onTarget)) return soloClear();
+    } else if (solo.eaten >= L.goal) {
+      return soloClear();
+    }
+
+    updateSoloHud();
+  }
+
+  function soloFail(reason) {
+    stopSoloTimer();
+    solo.screen = 'failed';
+    solo.failReason = reason;
+    pauseMusic();
+    sfxDie();
+    renderOverlay();
+    updateSoloHud();
+  }
+
+  function soloClear() {
+    stopSoloTimer();
+    solo.screen = 'cleared';
+    progress = loadProgress();
+    if (solo.levelIndex + 1 > progress.unlocked) {
+      progress.unlocked = Math.min(solo.levelIndex + 1, LEVELS.length - 1);
+    }
+    const secs = Math.round(solo.elapsed * 10) / 10;
+    if (!progress.best[solo.levelIndex] || secs < progress.best[solo.levelIndex]) {
+      progress.best[solo.levelIndex] = secs;
+    }
+    saveProgress(progress);
+    pauseMusic();
+    sfxClear();
+    renderOverlay();
+    updateSoloHud();
+  }
+
+  function soloPauseToggle() {
+    if (solo.screen === 'playing') {
+      stopSoloTimer();
+      solo.screen = 'paused';
+      pauseMusic();
+    } else if (solo.screen === 'paused') {
+      solo.screen = 'playing';
+      restartSoloTimer();
+      startMusic(TRACKS[solo.levelIndex]);
+    }
+    renderOverlay();
+  }
+
+  // 产出与服务器 state 完全同形状的对象，直接复用现有渲染器
+  function activeSnapshot() {
+    if (mode !== 'solo') return snapshot;
+    return {
+      snakes: [{
+        id: 'solo',
+        name: '',
+        body: solo.body,
+        direction: solo.direction,
+        alive: solo.screen !== 'failed',
+        score: solo.eaten * 10,
+        color: SOLO_COLOR,
+        skin: 0,
+      }],
+      foods: solo.food ? [{ x: solo.food[0], y: solo.food[1], kind: 'normal' }] : [],
+      status: solo.screen,
+    };
+  }
+
+  function soloProgressText(L) {
+    if (L.type === 'box') {
+      const done = solo.boxes.filter(b => b.onTarget).length;
+      return `${done}/${solo.boxes.length}`;
+    }
+    return `${solo.eaten}/${L.goal}`;
+  }
+
+  function updateSoloHud() {
+    if (mode !== 'solo') return;
+    const L = LEVELS[solo.levelIndex];
+    cards[0].classList.remove('empty');
+    cards[0].style.setProperty('--pc', SOLO_COLOR);
+    cards[0].querySelector('.pname').textContent = `第 ${solo.levelIndex + 1} 关 · ${L.name}`;
+    tags[0].textContent = { classic: '标准', maze: '迷宫', box: '推箱' }[L.type] || '';
+    scores[0].textContent = soloProgressText(L);
+
+    cards[1].classList.remove('empty');
+    cards[1].style.setProperty('--pc', '#ff3df0');
+    cards[1].querySelector('.pname').textContent = L.type === 'box' ? '力度 · 一次推动格数' : '已吃食物';
+    tags[1].textContent = '';
+    scores[1].textContent = L.type === 'box' ? solo.power : solo.eaten;
+  }
+
+  /* ---------------- rendering ---------------- */
+
+  const BITE_MS = 420;
+  const PARTICLE_LIFE = 0.55;
+  const PARTICLE_DRAG = 0.12;
+  const particles = [];
+  const biteAt = {};
+  let lastFrame = 0;
+
+  function spawnParticles(gx, gy) {
+    const cx = gx * CELL + CELL / 2, cy = gy * CELL + CELL / 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+      const sp = 62 + Math.random() * 52;
+      particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, alt: i % 2 === 0 });
+    }
+  }
+
+  function hexRgb(hex) {
+    const n = parseInt(String(hex).replace('#', ''), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const rgbStr = c => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
+
+  function roundRect(x, y, w, h, r) {
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else {
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+  }
+
+  // 只往当前路径里加一段身体的子路径（调用方负责 beginPath），
+  // 这样整条蛇可以用一次 stroke 画完，不必每段都开一次带阴影的描边
+  function segSub(x, y, size, shape) {
+    const cx = x + size / 2, cy = y + size / 2;
+    if (shape === 'diamond') {
+      ctx.moveTo(cx, y); ctx.lineTo(x + size, cy); ctx.lineTo(cx, y + size); ctx.lineTo(x, cy);
+      ctx.closePath();
+    } else if (shape === 'hex') {
+      const r = size / 2;
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI / 6 + i * Math.PI / 3;
+        const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+        if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+    } else if (shape === 'square') {
+      ctx.rect(x, y, size, size);
+    } else if (shape === 'drop') {
+      if (ctx.roundRect) ctx.roundRect(x, y, size, size, [size * 0.48, size * 0.48, size * 0.48, 2]);
+      else ctx.rect(x, y, size, size);
+    } else {
+      if (ctx.roundRect) ctx.roundRect(x, y, size, size, size * 0.34);
+      else ctx.rect(x, y, size, size);
+    }
+  }
+
+  function drawSnake(s, t, blur) {
+    const body = s.body;
+    const n = body.length;
+    if (!n) return;
+
+    const skin = SKINS[s.skin] || SKINS[0];
+    const base = hexRgb(s.color || skin.color);
+    const head = mix(base, [255, 255, 255], 0.62);
+    const tail = mix(base, [0, 0, 0], 0.5);
+    const alive = s.alive;
+    const isMe = s.id === 'solo' || s.id === myId;
+    const ghosted = mode === 'lan' && !isMe && s.ghost > 0;   // 别人隐身：只看到很淡的残影
+    const slowed = s.slow > 0;
+    const pad = 2.1;
+    const size = CELL - pad * 2;
+
+    // 自己的蛇画得更亮更粗；别人的压暗一档；残影几乎看不见
+    ctx.save();
+    if (ghosted) ctx.globalAlpha = 0.2;
+    else if (mode === 'lan' && !isMe) ctx.globalAlpha = 0.8;
+
+    // glowing outline（整条蛇一次描边）
+    ctx.save();
+    if (alive) {
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = isMe ? blur * 1.5 : blur * 0.8;
+      const a = isMe ? 1 : 0.6;
+      ctx.strokeStyle = `rgba(${Math.round(head[0])},${Math.round(head[1])},${Math.round(head[2])},${a})`;
+    } else {
+      ctx.strokeStyle = 'rgba(140,150,165,.35)';
+    }
+    ctx.lineWidth = isMe ? 2 : 1.3;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) segSub(body[i][0] * CELL + pad, body[i][1] * CELL + pad, size, skin.shape);
+    ctx.stroke();
+    ctx.restore();
+
+    // fills
+    for (let i = n - 1; i >= 0; i--) {
+      const k = n === 1 ? 0 : i / (n - 1);
+      ctx.fillStyle = alive ? rgbStr(mix(head, tail, k)) : 'rgba(120,132,148,.5)';
+      ctx.beginPath();
+      segSub(body[i][0] * CELL + pad, body[i][1] * CELL + pad, size, skin.shape);
+      ctx.fill();
+    }
+
+    // 被减速的蛇整体染一层琥珀色
+    if (alive && slowed) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(255,190,70,.34)';
+      ctx.beginPath();
+      for (let i = 0; i < n; i++) segSub(body[i][0] * CELL + pad, body[i][1] * CELL + pad, size, skin.shape);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    if (!alive) {
+      ctx.restore();
+      return;
+    }
+
+    // head with elastic squash/stretch when this snake eats
+    const hx = body[0][0] * CELL + CELL / 2, hy = body[0][1] * CELL + CELL / 2;
+    const e = Math.max(0, Math.min(1, (t - (biteAt[s.id] || -1e9)) / BITE_MS));
+    const k = 1 + 0.38 * Math.exp(-5.5 * e) * Math.sin(e * Math.PI * 3.2);
+
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.scale(k, k);
+    ctx.translate(-hx, -hy);
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur = isMe ? blur * 1.8 : blur;
+    ctx.fillStyle = rgbStr(mix(base, [255, 255, 255], 0.85));
+    ctx.beginPath();
+    segSub(body[0][0] * CELL + pad, body[0][1] * CELL + pad, size, skin.shape);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    const d = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[s.direction] || [1, 0];
+    const ox = d[0] * 3.5, oy = d[1] * 3.5;
+    const px = -d[1] * 3.4, py = d[0] * 3.4;
+    ctx.fillStyle = '#04121c';
+    ctx.beginPath(); ctx.arc(hx + ox + px, hy + oy + py, 2.1, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(hx + ox - px, hy + oy - py, 2.1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // 护盾光圈
+    if (s.shield > 0) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(125,255,176,.9)';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = '#7dffb0';
+      ctx.shadowBlur = blur;
+      ctx.beginPath();
+      ctx.arc(hx, hy, CELL * (0.62 + 0.06 * Math.sin(t / 140)), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // name tag above the head（隐身的人不显示名字，否则等于没隐身）
+    if (mode === 'lan' && s.name && !ghosted) {
+      ctx.save();
+      ctx.font = `600 ${Math.round(CELL * 0.5)}px "PingFang SC", "Microsoft YaHei", system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      const ny = hy - CELL * 0.6;
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = 'rgba(2,6,12,.85)';
+      ctx.strokeText(s.name, hx, ny);
+      ctx.fillStyle = isMe ? '#ffffff' : 'rgba(205,230,248,.78)';
+      ctx.fillText(s.name, hx, ny);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  function draw(t, dt) {
+    const s = canvas.width / W;
+    const blur = 14 * s;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+
+    ctx.fillStyle = '#05080f';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(34,230,255,.055)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < COLS; i++) {
+      ctx.beginPath(); ctx.moveTo(i * CELL, 0); ctx.lineTo(i * CELL, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * CELL); ctx.lineTo(W, i * CELL); ctx.stroke();
+    }
+
+    const snap = activeSnapshot();
+    const soloOn = mode === 'solo';
+
+    // 目标点（压在最底层）
+    if (soloOn && solo.targets.length) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,214,102,.5)';
+      ctx.lineWidth = 1.3;
+      ctx.setLineDash([4, 3]);
+      for (const tg of solo.targets) {
+        ctx.beginPath();
+        roundRect(tg.x * CELL + 5, tg.y * CELL + 5, CELL - 10, CELL - 10, 4);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // 障碍墙
+    if (soloOn && solo.obstacles.length) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(168,85,247,.85)';
+      ctx.shadowBlur = blur * 0.6;
+      ctx.fillStyle = 'rgba(58,40,92,.95)';
+      for (const o of solo.obstacles) {
+        ctx.beginPath();
+        roundRect(o[0] * CELL + 2.5, o[1] * CELL + 2.5, CELL - 5, CELL - 5, 4);
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.strokeStyle = 'rgba(168,85,247,.75)';
+      ctx.lineWidth = 1.2;
+      for (const o of solo.obstacles) {
+        ctx.beginPath();
+        roundRect(o[0] * CELL + 2.5, o[1] * CELL + 2.5, CELL - 5, CELL - 5, 4);
+        ctx.stroke();
+      }
+    }
+
+    if (snap && snap.foods) {
+      for (const f of snap.foods) {
+        const st = FOOD_STYLE[f.kind] || FOOD_STYLE.normal;
+        const fx = f.x * CELL + CELL / 2, fy = f.y * CELL + CELL / 2;
+        const special = f.kind && f.kind !== 'normal';
+        const r = CELL * (special ? 0.3 : 0.28) * (1 + Math.sin(t / (special ? 170 : 240)) * 0.12);
+
+        const glow = ctx.createRadialGradient(fx, fy, 0, fx, fy, CELL * 1.9);
+        glow.addColorStop(0, `rgba(${st.rgb},.55)`);
+        glow.addColorStop(1, `rgba(${st.rgb},0)`);
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(fx, fy, CELL * 1.9, 0, Math.PI * 2); ctx.fill();
+
+        ctx.save();
+        ctx.shadowColor = `rgb(${st.rgb})`;
+        ctx.shadowBlur = blur * (special ? 1.4 : 1);
+        ctx.fillStyle = st.core;
+        ctx.beginPath(); ctx.arc(fx, fy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+
+        if (st.ring) {   // 特殊食物再套一圈，和普通食物一眼分开
+          ctx.save();
+          ctx.strokeStyle = `rgba(${st.rgb},.9)`;
+          ctx.lineWidth = 1.6;
+          if (st.ring === 'dash') ctx.setLineDash([3, 3]);
+          const rr = CELL * (0.42 + 0.05 * Math.sin(t / 150));
+          ctx.beginPath(); ctx.arc(fx, fy, rr, 0, Math.PI * 2); ctx.stroke();
+          if (st.ring === 'double') {
+            ctx.beginPath(); ctx.arc(fx, fy, rr * 0.72, 0, Math.PI * 2); ctx.stroke();
+          }
+          ctx.restore();
+        }
+      }
+    }
+
+    // 箱子：归位后变绿并加亮
+    if (soloOn) {
+      for (const b of solo.boxes) {
+        const c = b.onTarget ? [125, 255, 176] : [255, 176, 32];
+        ctx.save();
+        ctx.shadowColor = rgbStr(c);
+        ctx.shadowBlur = blur * (b.onTarget ? 1.15 : 0.8);
+        ctx.fillStyle = rgbStr(mix(c, [255, 255, 255], 0.32));
+        ctx.beginPath();
+        roundRect(b.x * CELL + 3.5, b.y * CELL + 3.5, CELL - 7, CELL - 7, 4);
+        ctx.fill();
+        ctx.restore();
+        ctx.strokeStyle = `rgba(${c[0]},${c[1]},${c[2]},.9)`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        roundRect(b.x * CELL + 3.5, b.y * CELL + 3.5, CELL - 7, CELL - 7, 4);
+        ctx.stroke();
+      }
+    }
+
+    if (snap) for (const sn of snap.snakes) drawSnake(sn, t, blur);
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const drag = Math.pow(PARTICLE_DRAG, dt);
+      p.vx *= drag; p.vy *= drag;
+      p.life -= dt / PARTICLE_LIFE;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, p.life * 1.6);
+      ctx.shadowColor = p.alt ? '#ff3df0' : '#22e6ff';
+      ctx.shadowBlur = blur * 0.9;
+      ctx.fillStyle = p.alt ? '#ff7ae9' : '#7df3ff';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1.3 + p.life * 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+
+    // ---- 最后 20 秒：整块画布泛红，越接近 0 脉动越快 ----
+    if (mode === 'lan' && snap && snap.status === 'playing'
+        && typeof snap.timeLeft === 'number' && snap.timeLeft <= URGENT_AT) {
+      const k = 1 - Math.max(0, snap.timeLeft) / URGENT_AT;
+      const pulse = 0.5 + 0.5 * Math.sin(t * (0.005 + k * 0.016));
+      ctx.fillStyle = `rgba(255,42,64,${(0.05 + k * 0.15) * (0.55 + 0.45 * pulse)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    // ---- 自己阵亡时，画布中央的大号复活倒计时 ----
+    if (mode === 'lan' && snap && snap.snakes) {
+      const me = snap.snakes.find(s => s.id === myId);
+      if (me && !me.alive && me.respawnIn > 0) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(2,6,12,.5)';
+        ctx.fillRect(0, H / 2 - CELL * 1.7, W, CELL * 3.4);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `700 ${Math.round(CELL * 1.5)}px system-ui, sans-serif`;
+        ctx.fillStyle = '#ff5c78';
+        ctx.shadowColor = '#ff2a40';
+        ctx.shadowBlur = blur * 2;
+        ctx.fillText(me.respawnIn.toFixed(1), W / 2, H / 2 - CELL * 0.2);
+        ctx.shadowBlur = 0;
+        ctx.font = `600 ${Math.round(CELL * 0.6)}px "PingFang SC", system-ui, sans-serif`;
+        ctx.fillStyle = 'rgba(255,222,230,.92)';
+        ctx.fillText('复活中', W / 2, H / 2 + CELL * 1.1);
+        ctx.restore();
+      }
+    }
+
+    // ---- 表情气泡：带底衬和弹出动画，免得被蛇身和食物淹没 ----
+    if (snap && snap.snakes) {
+      for (const s of snap.snakes) {
+        const b = emoteBubbles[s.id];
+        if (!b || b.until < t || !s.body.length) continue;
+        const left = b.until - t;
+        const age = b.total - left;
+        const pop = Math.min(1, age / 180);
+        const scale = 1 + 0.45 * (1 - pop) * Math.sin(pop * Math.PI * 1.6);
+        const alpha = Math.min(1, left / 500, pop * 2);
+
+        const bx = s.body[0][0] * CELL + CELL / 2;
+        const by = s.body[0][1] * CELL - CELL * 0.7;
+        const emoji = CELL * 1.35;
+        const w = emoji + CELL * 0.85, h = emoji + CELL * 0.6;
+
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.translate(bx, by);
+        ctx.scale(scale, scale);
+        ctx.translate(-bx, -by);
+
+        ctx.shadowColor = s.color;
+        ctx.shadowBlur = blur * 1.3;
+        ctx.fillStyle = 'rgba(6,14,24,.93)';
+        ctx.beginPath();
+        roundRect(bx - w / 2, by - h, w, h, h * 0.32);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.font = `${Math.round(emoji)}px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(b.text, bx, by - h / 2);
+        ctx.restore();
+      }
+    }
+  }
+
+  function loop(t) {
+    const dt = lastFrame ? Math.min(0.05, (t - lastFrame) / 1000) : 0;
+    lastFrame = t;
+
+    // 帧率：按半秒窗口统计，数字才不会一直乱跳
+    fpsFrames++;
+    if (!fpsLast) fpsLast = t;
+    if (t - fpsLast >= 500) {
+      fpsValue = Math.round((fpsFrames * 1000) / (t - fpsLast));
+      fpsFrames = 0;
+      fpsLast = t;
+      fpsEl.textContent = fpsValue;
+    }
+
+    draw(t, dt);
+    requestAnimationFrame(loop);
+  }
+
+  /* ---------------- bootstrap ---------------- */
+
+  window.addEventListener('resize', layout);
+  window.addEventListener('orientationchange', () => setTimeout(layout, 120));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', layout);
+
+  // 只在 ?debug=1 时暴露引擎，方便脚本化验证；正常打开不污染全局
+  if (new URLSearchParams(location.search).get('debug') === '1') {
+    window.__solo = {
+      solo, LEVELS, TRACKS, uiState,
+      startLevel, pushBox, makeObstacles, fullyConnected, placeSoloFood, soloStep, soloInput,
+      progress: () => progress,
+      setScreen: s => { solo.screen = s; renderOverlay(); },
+      setMode: m => { mode = m; renderOverlay(); },
+    };
+  }
+
+  renderPlayerList();
+  renderEmoteBar();
+  renderOverlay();
+  updateHud();
+  layout();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

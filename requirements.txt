@@ -1,0 +1,3 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12          # uvicorn 需要它（或 wsproto）才能处理 WebSocket 升级
