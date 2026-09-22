@@ -410,35 +410,39 @@
   }
   .wait-btn.cool { color: #7dffb0; border-color: rgba(125, 255, 176, .6); }
 
-  /* ---------- 手机虚拟摇杆 ---------- */
-  .stick {
-    position: fixed; z-index: 4;
-    width: 132px; height: 132px;
-    margin: -66px 0 0 -66px;          /* 以触点为中心 */
-    border-radius: 50%;
-    border: 2px solid rgba(34, 230, 255, .32);
-    background: radial-gradient(circle, rgba(34, 230, 255, .10), rgba(4, 6, 13, .42));
-    pointer-events: none;             /* 不能挡住底下的按钮 */
-    transition: opacity .16s;
+  /* ---------- 手机十字方向键（常驻左下角，不需要开关） ---------- */
+  .dpad {
+    position: fixed; left: 14px; bottom: 64px;
+    display: grid;
+    grid-template-columns: repeat(3, 46px);
+    grid-template-rows: repeat(3, 46px);
+    gap: 4px;
+    z-index: 4;
+    touch-action: none;
   }
-  .stick .knob {
-    position: absolute; left: 50%; top: 50%;
-    width: 54px; height: 54px; margin: -27px 0 0 -27px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #cdfaff, #22e6ff);
-    box-shadow: 0 0 18px rgba(34, 230, 255, .7);
-    will-change: transform;
+  .dpad button {
+    font: inherit; font-size: 17px; line-height: 1;
+    border-radius: 12px;
+    color: rgba(150, 235, 255, .85);
+    background: rgba(8, 20, 32, .62);
+    border: 1px solid rgba(34, 230, 255, .28);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    cursor: pointer;
+    transition: background .1s, box-shadow .1s, transform .08s, color .1s;
   }
-  .stick .arrow {
-    position: absolute; font-size: 13px; line-height: 1;
-    color: rgba(125, 243, 255, .32);
-    transition: color .1s, text-shadow .1s;
+  .dpad button[data-dir="up"]    { grid-area: 1 / 2; }
+  .dpad button[data-dir="left"]  { grid-area: 2 / 1; }
+  .dpad button[data-dir="right"] { grid-area: 2 / 3; }
+  .dpad button[data-dir="down"]  { grid-area: 3 / 2; }
+  /* 当前行进方向常亮，让「移动的效果」看得见 */
+  .dpad button.cur {
+    color: #04121c;
+    background: linear-gradient(180deg, #7df3ff, #22e6ff);
+    box-shadow: 0 0 18px rgba(34, 230, 255, .6);
   }
-  .stick .arrow.on { color: #d6fbff; text-shadow: 0 0 10px #22e6ff; }
-  .stick .arrow.up    { left: 50%; top: 9px;    transform: translateX(-50%); }
-  .stick .arrow.down  { left: 50%; bottom: 9px; transform: translateX(-50%); }
-  .stick .arrow.left  { top: 50%; left: 9px;    transform: translateY(-50%); }
-  .stick .arrow.right { top: 50%; right: 9px;   transform: translateY(-50%); }
+  /* 按下的瞬间再亮一圈 */
+  .dpad button.on { transform: scale(.9); box-shadow: 0 0 26px rgba(34, 230, 255, .95); }
 
   /* ---------- 统一结算页 ---------- */
   .result { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 8px; }
@@ -517,9 +521,18 @@
     .timer { font-size: 18px; }
     #scoreboard li { font-size: 11px; padding: 2px 0; }
     #scoreboard .sname { max-width: 78px; }
-    .emote-bar { bottom: 44px; }
+    .emote-bar { bottom: 40px; }
     .emote-bar button { width: 32px; height: 32px; font-size: 16px; }
-    .skill-btn { right: 12px; bottom: 42px; padding: 8px 12px; font-size: 12px; min-width: 78px; }
+    /* 技能键叠在表情栏上方，否则窄屏上两者会压在一起 */
+    .skill-btn { right: 12px; bottom: 84px; padding: 8px 12px; font-size: 12px; min-width: 78px; }
+    /* 十字键抬高到表情栏之上，避免在窄屏上互相压住 */
+    .dpad {
+      left: 12px; bottom: 104px;
+      grid-template-columns: repeat(3, 42px);
+      grid-template-rows: repeat(3, 42px);
+    }
+    .dpad button { font-size: 15px; border-radius: 11px; }
+    .wait-btn { left: 12px; bottom: 104px; }
     .skins button { width: 30px; height: 30px; }
     .picks { max-width: 280px; }
     .legend { grid-template-columns: 1fr; gap: 3px 0; font-size: 10px; }
@@ -598,10 +611,11 @@
   </div>
 
   <div class="emote-bar" id="emoteBar"></div>
-  <div class="stick hidden" id="stick">
-    <span class="arrow up">▲</span><span class="arrow down">▼</span>
-    <span class="arrow left">◀</span><span class="arrow right">▶</span>
-    <div class="knob" id="stickKnob"></div>
+  <div class="dpad hidden" id="dpad">
+    <button data-dir="up">▲</button>
+    <button data-dir="left">◀</button>
+    <button data-dir="right">▶</button>
+    <button data-dir="down">▼</button>
   </div>
   <button class="btn skill-btn hidden" id="skillBtn">闪现</button>
   <button class="btn ghost wait-btn hidden" id="waitBtn">准备下一局</button>
@@ -645,7 +659,7 @@
 
   <div class="hint">
     <span class="keys-only"><b>W</b> <b>A</b> <b>S</b> <b>D</b> 移动</span>
-    <span class="touch-only">滑动屏幕控制方向</span>
+    <span class="touch-only">左下角方向键控制移动</span>
     <span class="sep keys-only"></span>
     <span class="keys-only"><b>空格</b> 暂停</span>
     <span class="sep keys-only"></span>
@@ -724,8 +738,7 @@
   const skillBtn = document.getElementById('skillBtn');
   const waitBtn = document.getElementById('waitBtn');
   const effectBar = document.getElementById('effectBar');
-  const stick = document.getElementById('stick');
-  const stickKnob = document.getElementById('stickKnob');
+  const dpad = document.getElementById('dpad');
   const diffRow = document.getElementById('diffRow');
   const skillRow = document.getElementById('skillRow');
   const boardEl = document.querySelector('.board');
@@ -1507,62 +1520,40 @@
     else if (st === 'playing') lanInput(dir);
   });
 
-  // --- 手机虚拟摇杆：按下出底盘，拖动跟随手指，主导方向箭头点亮 ---
-  const STICK_DEAD = 22;       // 死区：小于这个距离不判方向
-  const STICK_RADIUS = 46;     // 摇杆头能离开中心的最大距离
-  let stickOrigin = null;
-  let stickGesture = null;
-
-  function stickHide() {
-    stick.classList.add('hidden');
-    stickOrigin = null;
-    stickGesture = null;
-    for (const a of stick.querySelectorAll('.arrow')) a.classList.remove('on');
-  }
-
-  function setStickDir(dir) {
-    if (dir !== stickGesture) {
-      stickGesture = dir;
-      for (const a of stick.querySelectorAll('.arrow')) {
-        a.classList.toggle('on', !!dir && a.classList.contains(dir));
-      }
-    }
-    if (!dir) return;
+  // --- 手机十字方向键：常驻左下角，按下即转向，当前方向常亮 ---
+  function dpadSend(dir) {
     if (mode === 'solo') soloInput(dir);
     else lanInput(dir);
   }
 
-  document.addEventListener('touchstart', e => {
+  for (const btn of dpad.querySelectorAll('button')) {
+    const dir = btn.dataset.dir;
+    const press = e => { e.preventDefault(); btn.classList.add('on'); dpadSend(dir); };
+    const release = () => btn.classList.remove('on');
+    btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('touchend', release, { passive: true });
+    btn.addEventListener('touchcancel', release, { passive: true });
+    // 桌面端也能点，方便调试
+    btn.addEventListener('mousedown', press);
+    btn.addEventListener('mouseup', release);
+    btn.addEventListener('mouseleave', release);
+  }
+
+  let dpadLastDir = null;
+  function updateDpad() {
     const st = uiState();
-    if (st !== 'playing' && st !== 'solo-playing') return;
-    if (e.touches.length !== 1) { stickHide(); return; }
-    const el = e.target;
-    // 别抢按钮 / 输入框 / 弹层自己的触摸
-    if (el && el.closest && el.closest('button, input, .overlay')) return;
-    const t = e.touches[0];
-    stickOrigin = { x: t.clientX, y: t.clientY };
-    stickGesture = null;
-    stick.style.left = t.clientX + 'px';
-    stick.style.top = t.clientY + 'px';
-    stickKnob.style.transform = 'translate(0px, 0px)';
-    stick.classList.remove('hidden');
-    for (const a of stick.querySelectorAll('.arrow')) a.classList.remove('on');
-  }, { passive: true });
+    const inPlay = st === 'playing' || st === 'solo-playing';
+    const me = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
+    const spectating = mode === 'lan' && inPlay && !me;   // 中途进来还没蛇，先不显示
+    dpad.classList.toggle('hidden', !(isTouch && inPlay && !spectating));
 
-  document.addEventListener('touchmove', e => {
-    if (!stickOrigin || e.touches.length !== 1) return;
-    if (uiState() !== 'playing' && uiState() !== 'solo-playing') { stickHide(); return; }
-    const t = e.touches[0];
-    const dx = t.clientX - stickOrigin.x, dy = t.clientY - stickOrigin.y;
-    const len = Math.hypot(dx, dy);
-    const k = len > STICK_RADIUS ? STICK_RADIUS / len : 1;   // 摇杆头限制在底盘内
-    stickKnob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
-    if (len < STICK_DEAD) { setStickDir(null); return; }
-    setStickDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
-  }, { passive: true });
-
-  document.addEventListener('touchend', stickHide, { passive: true });
-  document.addEventListener('touchcancel', stickHide, { passive: true });
+    const dir = mode === 'solo' ? solo.direction : (me ? me.direction : null);
+    if (dir === dpadLastDir) return;
+    dpadLastDir = dir;
+    for (const btn of dpad.querySelectorAll('button')) {
+      btn.classList.toggle('cur', btn.dataset.dir === dir);
+    }
+  }
 
   // block browser touch gestures
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
@@ -1765,22 +1756,65 @@
   }
 
   function startMusic(track, vol) {
+    // 页面在后台时直接返回：既不起音乐，也不要把已经挂起的 AudioContext 唤醒。
+    // （每条 state 都会调这里，不拦住的话刚挂起就会被重新拉起来）
+    if (document.hidden) return;
     if (track) useTrack(track);
     const a = ensureAudio();
     if (!a) return;
+    a.vol = vol == null ? MUSIC_VOL : vol;
     if (a.actx.state === 'suspended') a.actx.resume();
-    fadeMusic(vol == null ? MUSIC_VOL : vol, 0.9);
+    fadeMusic(a.vol, 0.9);
     if (!a.timer) a.timer = setInterval(pump, 25);
   }
 
   function pauseMusic() { fadeMusic(0.0001, 0.18); }
+
+  // ---- 页面不可见 / 被关闭时立刻掐断声音 ----
+  // 手机上「关掉浏览器」往往不会真正销毁页面：AudioContext 还活着就继续出声，
+  // 而音乐调度器还在每 25ms 排新音符 —— 这就是关掉后仍有声音残留的原因。
+  const audioReady = () => !!audio && audio.actx.state === 'running';
+
+  function suspendAudio() {
+    if (!audio) return;
+    if (audio.timer) { clearInterval(audio.timer); audio.timer = null; }
+    try { if (audio.actx.state === 'running') audio.actx.suspend(); } catch {}
+  }
+
+  function teardownAudio() {
+    suspendAudio();
+    if (!audio) return;
+    try { audio.actx.close(); } catch {}
+    audio = null;
+  }
+
+  function resumeAudioIfPlaying() {
+    if (!audio || document.hidden) return;
+    const st = uiState();
+    if (st !== 'playing' && st !== 'paused'
+        && st !== 'solo-playing' && st !== 'solo-paused') return;
+    try { if (audio.actx.state === 'suspended') audio.actx.resume(); } catch {}
+    fadeMusic(audio.vol == null ? MUSIC_VOL : audio.vol, 0.4);   // 回来时把音量补回来
+    if (!audio.timer) audio.timer = setInterval(pump, 25);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) suspendAudio();
+    else resumeAudioIfPlaying();
+  });
+  window.addEventListener('pagehide', e => {
+    if (e.persisted) suspendAudio();   // 进了 bfcache，回来还能恢复
+    else teardownAudio();              // 页面真的被销毁了
+  });
+  window.addEventListener('pageshow', resumeAudioIfPlaying);
+  window.addEventListener('beforeunload', teardownAudio);
 
   const EAT_SFX_GAP = 70;      // 两次吃食物音效的最小间隔（毫秒）
   let lastEatAt = 0;
 
   // mine = 自己吃的：满音量；别人的轻很多。多人同时吃时再做一次全局节流。
   function sfxEat(mine) {
-    if (!audio) return;
+    if (!audioReady()) return;
     const now = performance.now();
     if (now - lastEatAt < EAT_SFX_GAP) return;
     lastEatAt = now;
@@ -1798,7 +1832,7 @@
   }
 
   function sfxDie() {
-    if (!audio) return;
+    if (!audioReady()) return;
     const t = audio.actx.currentTime, dur = 1.2;
     const o = audio.actx.createOscillator();
     o.type = 'sawtooth';
@@ -1831,7 +1865,7 @@
 
   // 过关的小号角
   function sfxClear() {
-    if (!audio) return;
+    if (!audioReady()) return;
     const t0 = audio.actx.currentTime;
     [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
       const o = audio.actx.createOscillator(), g = audio.actx.createGain();
@@ -2573,6 +2607,7 @@
       fpsEl.textContent = fpsValue;
     }
 
+    updateDpad();
     draw(t, dt);
     requestAnimationFrame(loop);
   }
