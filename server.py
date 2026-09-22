@@ -286,7 +286,8 @@ class Room:
                 self.host_id = pid
 
         await self.ensure_task()
-        await self.broadcast_room()
+        # 房间广播交给调用方在 welcome 之后发：客户端要先知道自己的 id/皮肤，
+        # 再收到房间列表，否则界面会在「输入名字」那一屏多停一拍
         return player, None
 
     async def leave(self, pid: str) -> None:

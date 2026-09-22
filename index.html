@@ -529,7 +529,7 @@
   </div>
 
   <div class="emote-bar" id="emoteBar"></div>
-  <button class="btn skill-btn" id="skillBtn">闪现</button>
+  <button class="btn skill-btn hidden" id="skillBtn">闪现</button>
   <button class="btn ghost wait-btn hidden" id="waitBtn">准备下一局</button>
 
   <div class="stage">
@@ -658,6 +658,10 @@
   const isTouch = matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 0;
   if (isTouch) document.body.classList.add('touch');
 
+  // 本地/局域网访问，还是部署到了云上 —— 提示词要说对
+  const onLocalNetwork = location.protocol === 'file:'
+    || /^(localhost|127\.|\[::1\]|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
+
   /* ---------------- canvas sizing ---------------- */
 
   const DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -779,6 +783,10 @@
         layout();
         joined = true;
         overInfo = null;
+        // 收到 welcome 就意味着已经进房间了，必须立刻重画一次，
+        // 否则界面会停在「输入名字」那一屏，而按钮的实际行为已经是房间状态了
+        updateHud();
+        renderOverlay();
         break;
 
       case 'room':
@@ -906,17 +914,22 @@
     }
     updateSkillBtn();
     updateEffectBar();
+    updateWaitBtn();
+  }
 
-    // 本局开始后才进来的人没有蛇，给他一个「准备下一局」的入口
-    const mySnake = snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
-    const waiting = !mySnake;
-    const meP = players.find(p => p.id === myId);
+  // 本局开始后才进来的人没有蛇，给他一个「准备下一局」的入口。
+  // 只在对局进行中、且自己确实没有蛇时才出现（大厅里 snapshot 还是 null，不能据此判断）
+  function updateWaitBtn() {
+    const inRound = mode === 'lan' && joined
+      && (serverStatus === 'playing' || serverStatus === 'paused');
+    const mySnake = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
+    const waiting = inRound && !mySnake;
     waitBtn.classList.toggle('hidden', !waiting);
-    if (waiting) {
-      const rdy = !!(meP && meP.ready);
-      waitBtn.textContent = rdy ? '已准备 · 等下一局' : '准备下一局';
-      waitBtn.classList.toggle('cool', rdy);
-    }
+    if (!waiting) return;
+    const meP = players.find(p => p.id === myId);
+    const rdy = !!(meP && meP.ready);
+    waitBtn.textContent = rdy ? '已准备 · 等下一局' : '准备下一局';
+    waitBtn.classList.toggle('cool', rdy);
   }
 
   /* ---------------- overlay ---------------- */
@@ -938,6 +951,10 @@
     const st = uiState();
     hudEl.classList.toggle('hidden', st === 'menu' || st === 'solo-levels');
     emoteBar.classList.toggle('hidden', st !== 'playing');
+    // 这两个浮动按钮不属于遮罩层，必须在这里也同步一次，
+    // 否则离开对局后它们会一直挂在屏幕上
+    updateSkillBtn();
+    updateWaitBtn();
     if (st === 'playing' || st === 'solo-playing') { overlay.classList.add('hidden'); return; }
     overlay.classList.remove('hidden');
 
@@ -965,7 +982,8 @@
 
     } else if (st === 'join') {
       titleEl.textContent = '联机对战';
-      subEl.textContent = isTouch ? '最多 2 人 · 同一局域网' : '最多 2 人 · 同一局域网 · WASD 移动';
+      const where = onLocalNetwork ? '同一局域网' : '联网对战';
+      subEl.textContent = `最多 ${maxPlayers} 人对战 · ${where}` + (isTouch ? '' : ' · WASD 移动');
       primaryBtn.textContent = '进入房间';
       secondaryBtn.textContent = '返回主菜单';
 
