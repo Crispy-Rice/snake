@@ -815,8 +815,8 @@
   let stateAt = 0;          // 最近一次 state 到达时刻（插值的时间基准）
   let lastStateAt = 0;
   let tickMs = 120;         // 服务端 tick 间隔，按实际到达间隔自校准
-  let predict = null;       // 本地预测 { dir, at }
   let pingSamples = [];     // 最近的延迟采样，显示用滑动平均
+  const SIM_LAG = +(new URLSearchParams(location.search).get('lag') || 0);   // 仅测试用
 
   const savedName = (() => { try { return localStorage.getItem('snake_name') || ''; } catch { return ''; } })();
   nameInput.value = savedName;
@@ -856,7 +856,9 @@
     ws.onmessage = ev => {
       let msg;
       try { msg = JSON.parse(ev.data); } catch { return; }
-      handle(msg);
+      // ?lag=150 用来在本机模拟真实网络延迟，否则预测/插值在 localhost 上根本测不出来
+      if (SIM_LAG) setTimeout(() => handle(msg), SIM_LAG);
+      else handle(msg);
     };
 
     ws.onclose = () => {
@@ -982,15 +984,6 @@
     if (gap > 20 && gap < 1000) tickMs = tickMs * 0.7 + gap * 0.3;   // 按实际间隔自校准
     lastStateAt = now;
     stateAt = now;
-
-    // 服务器已经按我按下的方向走了（或者我已经死了），本地预测就撤掉
-    if (predict) {
-      const mine = msg.snakes.find(s => s.id === myId);
-      if (!mine || !mine.alive || mine.direction === predict.dir
-          || now - predict.at > tickMs * 3) {
-        predict = null;
-      }
-    }
 
     snapshot = msg;
     updateHud();
@@ -1474,15 +1467,14 @@
     arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right',
   };
 
-  // 联机输入：先本地判一次合法性（同向无意义、反向非法），合法才发送，
-  // 同时记下预测，让蛇在服务器确认之前就先转过去
+  // 联机输入。校验规则和服务器保持一致（同向忽略、反向拒绝），只是少发一条无效指令；
+  // 这里**不做本地预测** —— 试过一版预测，在自己的回合/确认瞬间画面上会有抽搐，
+  // 收益不值得那个不稳定，所以只保留插值把移动画顺。
   function lanInput(dir) {
     const me = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
-    if (!me || !me.alive) return;
-    const cur = (predict && predict.dir) || me.direction;
-    if (dir === cur || dir === OPPOSITE[cur]) return;
+    if (!me || !me.alive || !DIRS[dir]) return;
+    if (dir === me.direction || dir === OPPOSITE[me.direction]) return;
     send({ type: 'input', dir });
-    predict = { dir, at: performance.now() };
   }
 
   document.addEventListener('keydown', e => {
@@ -2245,6 +2237,9 @@
 
   // 把「上一帧的位置」和「这一帧的位置」按 tick 进度插值，让蛇平滑滑动而不是整格跳。
   // 当前 body 的第 i 节在上一帧位于 prev[i-1]（头是前插的），第 0 节从旧蛇头移动过来。
+  // 把「上一帧的位置」和「这一帧的位置」按 tick 进度插值，让蛇平滑滑动而不是整格跳。
+  // 当前 body 的第 i 节在上一帧位于 prev[i-1]（头是前插的），第 0 节从旧蛇头移动过来。
+  // 只做插值、不做预测：插值是在两个**权威状态**之间平滑，天然不可能抽。
   function bodyFor(s, t) {
     const cur = s.body;
     const prev = prevBodies[s.id];
@@ -2255,20 +2250,13 @@
     // 只在「正常走了一格」时插值；闪现/复活/死亡直接吸附，否则整条蛇会横穿棋盘
     if (dh > 1 || !lenOk) return cur;
 
-    // 本地预测：自己的蛇按刚按下的方向先走一格，不等服务器往返
-    let target = cur;
-    if (predict && s.id === myId && predict.dir !== s.direction) {
-      const d = DIRS[predict.dir];
-      if (d) target = [[cur[0][0] + d.x, cur[0][1] + d.y], ...cur.slice(0, -1)];
-    }
-
     const prog = Math.max(0, Math.min(1, (t - stateAt) / tickMs));
     const out = [];
-    for (let i = 0; i < target.length; i++) {
+    for (let i = 0; i < cur.length; i++) {
       const from = i === 0 ? prev[0] : (prev[i - 1] || prev[prev.length - 1]);
       out.push([
-        from[0] + (target[i][0] - from[0]) * prog,
-        from[1] + (target[i][1] - from[1]) * prog,
+        from[0] + (cur[i][0] - from[0]) * prog,
+        from[1] + (cur[i][1] - from[1]) * prog,
       ]);
     }
     return out;
