@@ -410,6 +410,75 @@
   }
   .wait-btn.cool { color: #7dffb0; border-color: rgba(125, 255, 176, .6); }
 
+  /* ---------- 手机虚拟摇杆 ---------- */
+  .stick {
+    position: fixed; z-index: 4;
+    width: 132px; height: 132px;
+    margin: -66px 0 0 -66px;          /* 以触点为中心 */
+    border-radius: 50%;
+    border: 2px solid rgba(34, 230, 255, .32);
+    background: radial-gradient(circle, rgba(34, 230, 255, .10), rgba(4, 6, 13, .42));
+    pointer-events: none;             /* 不能挡住底下的按钮 */
+    transition: opacity .16s;
+  }
+  .stick .knob {
+    position: absolute; left: 50%; top: 50%;
+    width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #cdfaff, #22e6ff);
+    box-shadow: 0 0 18px rgba(34, 230, 255, .7);
+    will-change: transform;
+  }
+  .stick .arrow {
+    position: absolute; font-size: 13px; line-height: 1;
+    color: rgba(125, 243, 255, .32);
+    transition: color .1s, text-shadow .1s;
+  }
+  .stick .arrow.on { color: #d6fbff; text-shadow: 0 0 10px #22e6ff; }
+  .stick .arrow.up    { left: 50%; top: 9px;    transform: translateX(-50%); }
+  .stick .arrow.down  { left: 50%; bottom: 9px; transform: translateX(-50%); }
+  .stick .arrow.left  { top: 50%; left: 9px;    transform: translateY(-50%); }
+  .stick .arrow.right { top: 50%; right: 9px;   transform: translateY(-50%); }
+
+  /* ---------- 统一结算页 ---------- */
+  .result { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 8px; }
+
+  .rank { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+  .rank li {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 11px; border-radius: 11px;
+    background: rgba(255, 255, 255, .035);
+    border: 1px solid rgba(255, 255, 255, .07);
+    font-size: 13px;
+    transition: box-shadow .2s;
+  }
+  .rank li.me { border-color: rgba(34, 230, 255, .55); box-shadow: 0 0 16px rgba(34, 230, 255, .22); }
+  .rank .medal {
+    width: 22px; height: 22px; flex: none; border-radius: 7px;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 700;
+    background: rgba(255, 255, 255, .07); color: var(--muted);
+  }
+  .rank li.g1 .medal { background: rgba(255, 199, 66, .20); color: #ffc742; box-shadow: 0 0 12px rgba(255, 199, 66, .5); }
+  .rank li.g2 .medal { background: rgba(198, 214, 232, .18); color: #d7e4f2; box-shadow: 0 0 12px rgba(198, 214, 232, .4); }
+  .rank li.g3 .medal { background: rgba(214, 141, 84, .20); color: #e2a06a; box-shadow: 0 0 12px rgba(214, 141, 84, .4); }
+  .rank .rdot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .rank .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rank .val { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .stats > div {
+    padding: 9px 6px; border-radius: 11px; text-align: center;
+    background: rgba(255, 255, 255, .035);
+    border: 1px solid rgba(255, 255, 255, .07);
+  }
+  .stats .k { font-size: 10px; color: var(--muted); letter-spacing: .08em; }
+  .stats .v {
+    font-size: 16px; font-weight: 700; margin-top: 2px;
+    color: var(--neon); font-variant-numeric: tabular-nums;
+    text-shadow: 0 0 10px rgba(34, 230, 255, .5);
+  }
+
   /* ---------- 食物说明 ---------- */
   .legend {
     display: grid; grid-template-columns: auto auto; gap: 4px 16px;
@@ -529,6 +598,11 @@
   </div>
 
   <div class="emote-bar" id="emoteBar"></div>
+  <div class="stick hidden" id="stick">
+    <span class="arrow up">▲</span><span class="arrow down">▼</span>
+    <span class="arrow left">◀</span><span class="arrow right">▶</span>
+    <div class="knob" id="stickKnob"></div>
+  </div>
   <button class="btn skill-btn hidden" id="skillBtn">闪现</button>
   <button class="btn ghost wait-btn hidden" id="waitBtn">准备下一局</button>
 
@@ -541,6 +615,10 @@
           <div class="badge" id="badge"></div>
           <div class="title" id="title"></div>
           <div class="sub" id="sub"></div>
+          <div class="result hidden" id="resultBox">
+            <ol class="rank" id="resultList"></ol>
+            <div class="stats hidden" id="resultStats"></div>
+          </div>
           <div class="skins" id="skinRow"></div>
           <div class="legend" id="foodLegend">
             <div><i style="background:#ffd0fa;box-shadow:0 0 8px #ff3df0"></i>普通食物 · 长度 +1，分数 +10</div>
@@ -635,6 +713,9 @@
   const levelGrid = document.getElementById('levelGrid');
   const skinRow = document.getElementById('skinRow');
   const foodLegendEl = document.getElementById('foodLegend');
+  const resultBox = document.getElementById('resultBox');
+  const resultList = document.getElementById('resultList');
+  const resultStats = document.getElementById('resultStats');
   const killFeedEl = document.getElementById('killFeed');
   const scoreboardEl = document.getElementById('scoreboard');
   const timerEl = document.getElementById('timer');
@@ -643,6 +724,8 @@
   const skillBtn = document.getElementById('skillBtn');
   const waitBtn = document.getElementById('waitBtn');
   const effectBar = document.getElementById('effectBar');
+  const stick = document.getElementById('stick');
+  const stickKnob = document.getElementById('stickKnob');
   const diffRow = document.getElementById('diffRow');
   const skillRow = document.getElementById('skillRow');
   const boardEl = document.querySelector('.board');
@@ -713,6 +796,14 @@
   let maxPlayers = 5;
   let difficulty = 'normal';
   let fpsFrames = 0, fpsLast = 0, fpsValue = 0;
+
+  // ---- 渲染插值与本地预测 ----
+  let prevBodies = {};      // id -> 上一帧的权威蛇身
+  let stateAt = 0;          // 最近一次 state 到达时刻（插值的时间基准）
+  let lastStateAt = 0;
+  let tickMs = 120;         // 服务端 tick 间隔，按实际到达间隔自校准
+  let predict = null;       // 本地预测 { dir, at }
+  let pingSamples = [];     // 最近的延迟采样，显示用滑动平均
 
   const savedName = (() => { try { return localStorage.getItem('snake_name') || ''; } catch { return ''; } })();
   nameInput.value = savedName;
@@ -817,7 +908,10 @@
         break;
 
       case 'pong':
-        latency = Date.now() - msg.time;
+        // 用最近几次的滑动平均，数字不会一直乱跳
+        pingSamples.push(Date.now() - msg.time);
+        if (pingSamples.length > 5) pingSamples.shift();
+        latency = Math.round(pingSamples.reduce((a, b) => a + b, 0) / pingSamples.length);
         latencyEl.textContent = latency;
         break;
 
@@ -867,6 +961,23 @@
 
     if (msg.status === 'playing') { startMusic(BATTLE_TRACK, 0.10); note = ''; }
     if (msg.status === 'paused') pauseMusic();
+
+    // 记录上一帧的权威蛇身与到达时刻，供渲染插值使用
+    prevBodies = {};
+    if (snapshot && snapshot.snakes) for (const s of snapshot.snakes) prevBodies[s.id] = s.body;
+    const gap = lastStateAt ? now - lastStateAt : 0;
+    if (gap > 20 && gap < 1000) tickMs = tickMs * 0.7 + gap * 0.3;   // 按实际间隔自校准
+    lastStateAt = now;
+    stateAt = now;
+
+    // 服务器已经按我按下的方向走了（或者我已经死了），本地预测就撤掉
+    if (predict) {
+      const mine = msg.snakes.find(s => s.id === myId);
+      if (!mine || !mine.alive || mine.direction === predict.dir
+          || now - predict.at > tickMs * 3) {
+        predict = null;
+      }
+    }
 
     snapshot = msg;
     updateHud();
@@ -947,6 +1058,31 @@
     });
   }
 
+  // 联机「时间到」和单人「过关 / 失败」共用同一个结算版式
+  function renderResult(title, sub, rows, stats) {
+    titleEl.textContent = title;
+    subEl.textContent = sub;
+
+    resultList.innerHTML = '';
+    (rows || []).forEach((r, i) => {
+      const li = document.createElement('li');
+      li.className = (i < 3 ? `g${i + 1} ` : '') + (r.me ? 'me' : '');
+      li.innerHTML = `<span class="medal">${i + 1}</span>`
+        + `<span class="rdot" style="background:${r.color};box-shadow:0 0 8px ${r.color}"></span>`
+        + `<span class="nm">${escapeHtml(r.name)}</span>`
+        + `<span class="val">${r.value}</span>`;
+      resultList.appendChild(li);
+    });
+    resultList.classList.toggle('hidden', !(rows && rows.length));
+
+    resultStats.classList.toggle('hidden', !stats);
+    if (stats) {
+      resultStats.innerHTML = stats
+        .map(([k, v]) => `<div><div class="k">${k}</div><div class="v">${v}</div></div>`)
+        .join('');
+    }
+  }
+
   function renderOverlay() {
     const st = uiState();
     hudEl.classList.toggle('hidden', st === 'menu' || st === 'solo-levels');
@@ -958,14 +1094,19 @@
     if (st === 'playing' || st === 'solo-playing') { overlay.classList.add('hidden'); return; }
     overlay.classList.remove('hidden');
 
+    const isLobby = st === 'lobby';
+    const isResult = st === 'over' || st === 'solo-cleared' || st === 'solo-failed';
+
     joinRow.classList.toggle('hidden', st !== 'join');
-    plistEl.classList.toggle('hidden', !['lobby', 'paused', 'over'].includes(st));
     levelGrid.classList.toggle('hidden', st !== 'solo-levels');
     readyBtn.classList.toggle('hidden', !['lobby', 'over'].includes(st));
-    skinRow.classList.toggle('hidden', !['lobby', 'over'].includes(st));
-    foodLegendEl.classList.toggle('hidden', !['lobby', 'over'].includes(st));
-    skillRow.classList.toggle('hidden', !['lobby', 'over'].includes(st));
-    diffRow.classList.toggle('hidden', !['lobby', 'over'].includes(st));
+    // 设置项只在准备页面出现，结算页只放结果
+    skinRow.classList.toggle('hidden', !isLobby);
+    foodLegendEl.classList.toggle('hidden', !isLobby);
+    skillRow.classList.toggle('hidden', !isLobby);
+    diffRow.classList.toggle('hidden', !isLobby);
+    plistEl.classList.toggle('hidden', !['lobby', 'paused'].includes(st));
+    resultBox.classList.toggle('hidden', !isResult);
 
     primaryBtn.classList.remove('hidden');
     secondaryBtn.classList.remove('hidden');
@@ -1025,33 +1166,29 @@
       const alone = players.length === 1;
       const canStart = alone || allReady;
       const rank = (overInfo && overInfo.ranking) || [];
-      const mySnake = snapshot && snapshot.snakes.find(s => s.id === myId);
 
-      let title = '本局结束', tail = '';
+      let title = '本局结束', sub = '';
       if (overInfo && overInfo.winnerId) {
-        const w = rank.find(x => x.id === overInfo.winnerId)
-          || players.find(p => p.id === overInfo.winnerId);
+        const w = rank.find(x => x.id === overInfo.winnerId);
         title = w ? `${w.name} 获胜` : '本局结束';
-        tail = overInfo.winnerId === myId ? '你赢了！' : '再来一局？';
+        sub = overInfo.winnerId === myId ? '你赢了' : '再来一局？';
       } else {
         title = '平局';
-        tail = '最高分持平';
+        sub = '最高分持平';
       }
-      titleEl.textContent = title;
-
       const place = rank.findIndex(x => x.id === myId);
-      subEl.textContent = (mySnake ? `你的得分 ${mySnake.score}` : '')
-        + (place >= 0 ? ` · 第 ${place + 1} 名` : '')
-        + (tail ? ' · ' + tail : '')
-        + (players.length >= 2 && !allReady ? ' · 准备后房主可再开一局' : '');
+      if (place >= 0) sub = `你第 ${place + 1} 名` + (sub ? ` · ${sub}` : '');
+      if (players.length >= 2 && !allReady) sub += ' · 准备后房主可再开一局';
+
       badgeEl.textContent = overInfo && overInfo.reason === 'disconnect' ? 'DISCONNECT' : 'TIME UP';
+      renderResult(title, sub, rank.map(r => ({
+        name: r.name, color: r.color, value: r.score, me: r.id === myId,
+      })), null);
+
       primaryBtn.textContent = isHost ? (alone ? '再来一局（单人测试）' : '再来一局') : '等待房主';
       primaryBtn.disabled = !isHost || !canStart;
       readyBtn.textContent = me && me.ready ? '取消准备' : '准备';
       secondaryBtn.textContent = '离开房间';
-      renderSkinRow();
-      renderSkillRow();
-      renderDiffRow();
       renderPlayerList();
 
     } else if (st === 'solo-levels') {
@@ -1070,18 +1207,27 @@
 
     } else if (st === 'solo-cleared') {
       const last = solo.levelIndex >= LEVELS.length - 1;
+      const L = LEVELS[solo.levelIndex];
       const best = progress.best[solo.levelIndex];
-      titleEl.textContent = last ? '全部通关！' : '过关';
-      subEl.textContent = `第 ${solo.levelIndex + 1} 关 · 用时 ${Math.round(solo.elapsed * 10) / 10}s`
-        + (best ? ` · 最佳 ${best}s` : '');
+      const secs = Math.round(solo.elapsed * 10) / 10;
       badgeEl.textContent = last ? 'ALL CLEAR' : 'CLEAR';
+      renderResult(last ? '全部通关！' : '过关',
+        `第 ${solo.levelIndex + 1} 关 · ${L.name}`, null, [
+          ['用时', secs + 's'],
+          ['最佳', best ? best + 's' : '—'],
+          ['目标', L.type === 'box' ? `${L.boxes.length} 箱` : `吃 ${L.goal}`],
+        ]);
       primaryBtn.textContent = last ? '回到选关' : '下一关';
       secondaryBtn.textContent = '重玩本关';
 
     } else {
-      titleEl.textContent = '关卡失败';
-      subEl.textContent = `第 ${solo.levelIndex + 1} 关 · ${solo.failReason}`;
+      const L = LEVELS[solo.levelIndex];
       badgeEl.textContent = 'FAILED';
+      renderResult('关卡失败', `第 ${solo.levelIndex + 1} 关 · ${L.name}`, null, [
+        ['进度', soloProgressText(L)],
+        ['已吃', solo.eaten],
+        ['失误', solo.failReason],
+      ]);
       primaryBtn.textContent = '重试';
       secondaryBtn.textContent = '返回选关';
     }
@@ -1315,6 +1461,17 @@
     arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right',
   };
 
+  // 联机输入：先本地判一次合法性（同向无意义、反向非法），合法才发送，
+  // 同时记下预测，让蛇在服务器确认之前就先转过去
+  function lanInput(dir) {
+    const me = snapshot && snapshot.snakes ? snapshot.snakes.find(s => s.id === myId) : null;
+    if (!me || !me.alive) return;
+    const cur = (predict && predict.dir) || me.direction;
+    if (dir === cur || dir === OPPOSITE[cur]) return;
+    send({ type: 'input', dir });
+    predict = { dir, at: performance.now() };
+  }
+
   document.addEventListener('keydown', e => {
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const el = document.activeElement;
@@ -1347,32 +1504,65 @@
     if (!dir) return;
     e.preventDefault();
     if (mode === 'solo') soloInput(dir);
-    else if (st === 'playing') send({ type: 'input', dir });
+    else if (st === 'playing') lanInput(dir);
   });
 
-  // --- swipe steering (the server owns movement; this only sends input) ---
-  const SWIPE_MIN = 24;
-  let swipeAnchor = null;
+  // --- 手机虚拟摇杆：按下出底盘，拖动跟随手指，主导方向箭头点亮 ---
+  const STICK_DEAD = 22;       // 死区：小于这个距离不判方向
+  const STICK_RADIUS = 46;     // 摇杆头能离开中心的最大距离
+  let stickOrigin = null;
+  let stickGesture = null;
+
+  function stickHide() {
+    stick.classList.add('hidden');
+    stickOrigin = null;
+    stickGesture = null;
+    for (const a of stick.querySelectorAll('.arrow')) a.classList.remove('on');
+  }
+
+  function setStickDir(dir) {
+    if (dir !== stickGesture) {
+      stickGesture = dir;
+      for (const a of stick.querySelectorAll('.arrow')) {
+        a.classList.toggle('on', !!dir && a.classList.contains(dir));
+      }
+    }
+    if (!dir) return;
+    if (mode === 'solo') soloInput(dir);
+    else lanInput(dir);
+  }
 
   document.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { swipeAnchor = null; return; }
-    swipeAnchor = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    const st = uiState();
+    if (st !== 'playing' && st !== 'solo-playing') return;
+    if (e.touches.length !== 1) { stickHide(); return; }
+    const el = e.target;
+    // 别抢按钮 / 输入框 / 弹层自己的触摸
+    if (el && el.closest && el.closest('button, input, .overlay')) return;
+    const t = e.touches[0];
+    stickOrigin = { x: t.clientX, y: t.clientY };
+    stickGesture = null;
+    stick.style.left = t.clientX + 'px';
+    stick.style.top = t.clientY + 'px';
+    stickKnob.style.transform = 'translate(0px, 0px)';
+    stick.classList.remove('hidden');
+    for (const a of stick.querySelectorAll('.arrow')) a.classList.remove('on');
   }, { passive: true });
 
   document.addEventListener('touchmove', e => {
-    if (e.touches.length !== 1 || !swipeAnchor) return;
-    const st = uiState();
-    if (st !== 'playing' && st !== 'solo-playing') return;
+    if (!stickOrigin || e.touches.length !== 1) return;
+    if (uiState() !== 'playing' && uiState() !== 'solo-playing') { stickHide(); return; }
     const t = e.touches[0];
-    const dx = t.clientX - swipeAnchor.x, dy = t.clientY - swipeAnchor.y;
-    if (Math.hypot(dx, dy) < SWIPE_MIN) return;
-    const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
-    if (mode === 'solo') soloInput(dir);
-    else send({ type: 'input', dir });
-    swipeAnchor = { x: t.clientX, y: t.clientY };
+    const dx = t.clientX - stickOrigin.x, dy = t.clientY - stickOrigin.y;
+    const len = Math.hypot(dx, dy);
+    const k = len > STICK_RADIUS ? STICK_RADIUS / len : 1;   // 摇杆头限制在底盘内
+    stickKnob.style.transform = `translate(${dx * k}px, ${dy * k}px)`;
+    if (len < STICK_DEAD) { setStickDir(null); return; }
+    setStickDir(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
   }, { passive: true });
 
-  document.addEventListener('touchend', () => { swipeAnchor = null; }, { passive: true });
+  document.addEventListener('touchend', stickHide, { passive: true });
+  document.addEventListener('touchcancel', stickHide, { passive: true });
 
   // block browser touch gestures
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
@@ -2019,8 +2209,39 @@
     }
   }
 
-  function drawSnake(s, t, blur) {
-    const body = s.body;
+  // 把「上一帧的位置」和「这一帧的位置」按 tick 进度插值，让蛇平滑滑动而不是整格跳。
+  // 当前 body 的第 i 节在上一帧位于 prev[i-1]（头是前插的），第 0 节从旧蛇头移动过来。
+  function bodyFor(s, t) {
+    const cur = s.body;
+    const prev = prevBodies[s.id];
+    if (mode !== 'lan' || !prev || !prev.length || !cur.length) return cur;
+
+    const dh = Math.abs(cur[0][0] - prev[0][0]) + Math.abs(cur[0][1] - prev[0][1]);
+    const lenOk = cur.length === prev.length || cur.length === prev.length + 1;
+    // 只在「正常走了一格」时插值；闪现/复活/死亡直接吸附，否则整条蛇会横穿棋盘
+    if (dh > 1 || !lenOk) return cur;
+
+    // 本地预测：自己的蛇按刚按下的方向先走一格，不等服务器往返
+    let target = cur;
+    if (predict && s.id === myId && predict.dir !== s.direction) {
+      const d = DIRS[predict.dir];
+      if (d) target = [[cur[0][0] + d.x, cur[0][1] + d.y], ...cur.slice(0, -1)];
+    }
+
+    const prog = Math.max(0, Math.min(1, (t - stateAt) / tickMs));
+    const out = [];
+    for (let i = 0; i < target.length; i++) {
+      const from = i === 0 ? prev[0] : (prev[i - 1] || prev[prev.length - 1]);
+      out.push([
+        from[0] + (target[i][0] - from[0]) * prog,
+        from[1] + (target[i][1] - from[1]) * prog,
+      ]);
+    }
+    return out;
+  }
+
+  function drawSnake(s, t, blur, renderBody) {
+    const body = renderBody && renderBody.length ? renderBody : s.body;
     const n = body.length;
     if (!n) return;
 
@@ -2247,7 +2468,7 @@
       }
     }
 
-    if (snap) for (const sn of snap.snakes) drawSnake(sn, t, blur);
+    if (snap) for (const sn of snap.snakes) drawSnake(sn, t, blur, bodyFor(sn, t));
 
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
